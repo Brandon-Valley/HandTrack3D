@@ -1,3 +1,3 @@
-# GitHubPagesSimpleTemplate
+# HandTrack3D
 
-https://brandon-valley.github.io/GitHubPagesSimpleTemplate
+https://brandon-valley.github.io/HandTrack3D/
