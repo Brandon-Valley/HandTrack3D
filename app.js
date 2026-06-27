@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2026-06-27-assets-upper-face-fix';
+const VERSION = '2026-06-27-natural-model-only';
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
 const HAND_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 const FACE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task';
@@ -41,6 +41,7 @@ let lastDetect = 0;
 let lastFrame = performance.now();
 let fpsValue = 0;
 let yAxis, v1, v2, v3;
+let lastAssetCenter = null;
 
 const el = {
   app: document.getElementById('app'),
@@ -300,6 +301,7 @@ function initScene() {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.localClippingEnabled = true;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   el.fallback.style.display = 'none';
   el.stage.appendChild(renderer.domElement);
@@ -328,6 +330,7 @@ function rebuildModel() {
   joints = [];
   extras = [];
   assetRoot = null;
+  lastAssetCenter = null;
   assetStatus = 'none';
   assetLoadToken++;
   currentConnections = mode === 'hand' ? HAND_CONN : mode === 'face' ? FACE_CONN : mode === 'upper' ? UPPER_CONN : BODY_CONN;
@@ -335,8 +338,8 @@ function rebuildModel() {
   points = makeDefaultPoints(count);
   target = points.map(point => point.clone());
   smooth = points.map(point => point.clone());
-  const lineMaterial = new THREE.MeshStandardMaterial({ color: modelStyle === 'stick' ? 0x90f4ff : 0xe9a47b, roughness: 0.5, transparent: true, opacity: modelStyle === 'stick' ? 0.95 : 0.72 });
-  const jointMaterial = new THREE.MeshStandardMaterial({ color: modelStyle === 'stick' ? 0xffffff : 0xffd1b8, roughness: 0.45 });
+  const lineMaterial = new THREE.MeshStandardMaterial({ color: modelStyle === 'stick' ? 0x90f4ff : 0xe9a47b, roughness: 0.5, transparent: true, opacity: modelStyle === 'stick' ? 0.95 : 0.42 });
+  const jointMaterial = new THREE.MeshStandardMaterial({ color: modelStyle === 'stick' ? 0xffffff : 0xffd1b8, roughness: 0.45, transparent: true, opacity: modelStyle === 'stick' ? 1.0 : 0.46 });
   const cylinder = new THREE.CylinderGeometry(1, 1, 1, 18, 1, false);
   const sphere = new THREE.SphereGeometry(1, 20, 12);
   currentConnections.forEach(pair => {
@@ -378,7 +381,7 @@ function addNaturalExtras() {
     head.userData.kind = 'faceHead';
     root.add(head);
     extras.push(head);
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25 });
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, transparent: true, opacity: 0.55 });
     [-0.27, 0.27].forEach(x => {
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 8), eyeMat);
       eye.position.set(x, 0.13, 0.43);
@@ -409,7 +412,7 @@ function loadRiggedAssetInBackground() {
   const loader = new GLTFLoader();
   const timeout = setTimeout(() => {
     if (token === assetLoadToken) {
-      assetStatus = 'skipped';
+      assetStatus = 'fallback';
       updateLabels();
     }
   }, 5500);
@@ -439,8 +442,9 @@ function normalizeAsset(object) {
         const materials = Array.isArray(child.material) ? child.material : [child.material];
         materials.forEach(material => {
           material.transparent = true;
-          material.opacity = mode === 'body' || mode === 'upper' ? 0.48 : 0.38;
-          material.depthWrite = false;
+          material.opacity = mode === 'body' || mode === 'upper' ? 0.86 : mode === 'face' ? 0.92 : 0.96;
+          material.depthWrite = true;
+          material.clippingPlanes = mode === 'upper' ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.45)] : [];
         });
       }
     }
@@ -452,11 +456,11 @@ function normalizeAsset(object) {
   box.getCenter(center);
   object.position.sub(center);
   const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-  const targetSize = mode === 'hand' ? 2.35 : mode === 'face' ? 1.55 : mode === 'upper' ? 2.55 : 3.05;
+  const targetSize = mode === 'hand' ? 2.35 : mode === 'face' ? 2.05 : mode === 'upper' ? 2.95 : 3.25;
   object.scale.setScalar(targetSize / maxDim);
   if (mode === 'hand') object.rotation.set(0, Math.PI, 0);
-  if (mode === 'face') object.position.y -= 0.12;
-  if (mode === 'upper') object.position.y -= 0.28;
+  if (mode === 'face') object.position.y -= 0.10;
+  if (mode === 'upper') object.position.y -= 0.18;
 }
 
 function animate(now) {
@@ -583,19 +587,22 @@ function centerAndScale(array, centerIndices) {
 }
 
 function drawModel() {
+  const showGuide = modelStyle === 'stick' || !assetRoot;
   for (const mesh of lines) {
     const a = smooth[mesh.userData.a];
     const b = smooth[mesh.userData.b];
+    mesh.visible = showGuide;
     if (a && b) placeCylinder(mesh, a, b, radiusFor(mesh.userData.a, mesh.userData.b));
   }
   for (const joint of joints) {
     const point = smooth[joint.userData.index];
+    joint.visible = showGuide && !(mode === 'upper' && isLowerBodyIndex(joint.userData.index));
     if (point) {
       joint.position.copy(point);
       joint.scale.setScalar(modelStyle === 'stick' ? 0.045 : mode === 'body' || mode === 'upper' ? 0.075 : 0.085);
-      joint.visible = mode !== 'upper' || !isLowerBodyIndex(joint.userData.index);
     }
   }
+  for (const extra of extras) extra.visible = modelStyle === 'natural' && !assetRoot;
   updateExtras();
   updateAssetPose();
 }
@@ -618,12 +625,23 @@ function updateExtras() {
 
 function updateAssetPose() {
   if (!assetRoot) return;
+  let center = null;
+  if (mode === 'hand') center = midpoint([smooth[0], smooth[5], smooth[9], smooth[13], smooth[17]]);
+  else if (mode === 'face') center = smooth[4] ? smooth[4].clone() : midpoint(smooth);
+  else if (smooth[11] && smooth[12] && smooth[23] && smooth[24]) center = midpoint([smooth[11], smooth[12], smooth[23], smooth[24]]);
+  if (!center) center = new THREE.Vector3();
+  if (!lastAssetCenter) lastAssetCenter = center.clone();
+  lastAssetCenter.lerp(center, 0.20);
+  const targetOffset = mode === 'hand' ? new THREE.Vector3(0, 0, 0) : mode === 'face' ? new THREE.Vector3(0, -0.18, -0.08) : mode === 'upper' ? new THREE.Vector3(0, -0.14, -0.02) : new THREE.Vector3(0, -0.28, -0.02);
+  assetRoot.position.copy(lastAssetCenter).add(targetOffset);
   if ((mode === 'body' || mode === 'upper') && smooth[11] && smooth[12]) {
     const shoulderTilt = smooth[12].y - smooth[11].y;
     assetRoot.rotation.z = THREE.MathUtils.clamp(shoulderTilt * 0.18, -0.35, 0.35);
-    assetRoot.position.y = mode === 'upper' ? -0.18 : -0.28;
   } else if (mode === 'face' && smooth[2] && smooth[3]) {
     assetRoot.rotation.y = THREE.MathUtils.clamp((smooth[3].z - smooth[2].z) * 0.15, -0.3, 0.3);
+  } else if (mode === 'hand' && smooth[0] && smooth[9]) {
+    const angle = Math.atan2(smooth[9].x - smooth[0].x, smooth[9].y - smooth[0].y);
+    assetRoot.rotation.z = -angle * 0.15;
   }
 }
 
@@ -654,7 +672,7 @@ function placeCylinder(mesh, a, b, radius) {
   mesh.position.copy(v2.copy(a).add(b).multiplyScalar(0.5));
   mesh.quaternion.setFromUnitVectors(yAxis, direction.normalize());
   mesh.scale.set(radius, length, radius);
-  mesh.visible = !(mode === 'upper' && (isLowerBodyIndex(mesh.userData.a) || isLowerBodyIndex(mesh.userData.b)));
+  if (mode === 'upper' && (isLowerBodyIndex(mesh.userData.a) || isLowerBodyIndex(mesh.userData.b))) mesh.visible = false;
 }
 
 function drawOverlay(landmarks, connections, handTips) {
