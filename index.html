@@ -3,20 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <title>Hand Tracking 3D Demo</title>
+  <title>HandTrack3D</title>
+  <meta name="theme-color" content="#05070d">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+      }
+    }
+  </script>
   <style>
     :root {
       color-scheme: dark;
       --bg: #05070d;
-      --panel: rgba(8, 12, 22, 0.80);
-      --panelStrong: rgba(8, 12, 22, 0.94);
+      --panel: rgba(8, 12, 22, 0.82);
+      --panel2: rgba(8, 12, 22, 0.95);
+      --line: rgba(255, 255, 255, 0.16);
       --text: #f7fbff;
       --muted: #aeb9ce;
       --good: #6effb6;
       --warn: #ffd36e;
       --bad: #ff7373;
-      --accent: #6ed6ff;
-      --line: rgba(255, 255, 255, 0.16);
+      --blue: #70dcff;
     }
 
     * {
@@ -46,8 +54,8 @@
       inset: 0;
       overflow: hidden;
       background:
-        radial-gradient(circle at 50% 30%, rgba(52, 103, 255, 0.24), transparent 36%),
-        radial-gradient(circle at 22% 78%, rgba(89, 255, 183, 0.14), transparent 34%),
+        radial-gradient(circle at 54% 42%, rgba(70, 120, 255, 0.26), transparent 36%),
+        radial-gradient(circle at 20% 83%, rgba(110, 255, 182, 0.13), transparent 32%),
         linear-gradient(180deg, #090d17 0%, #05070d 100%);
     }
 
@@ -65,48 +73,49 @@
     }
 
     #stageFallback {
-      width: min(82vw, 520px);
-      color: rgba(247, 251, 255, 0.12);
-      font-size: clamp(54px, 22vw, 160px);
-      line-height: 1;
+      width: min(82vw, 560px);
+      color: rgba(247, 251, 255, 0.10);
+      font-size: clamp(48px, 21vw, 150px);
+      font-weight: 950;
+      letter-spacing: -0.08em;
+      line-height: 0.86;
       text-align: center;
       user-select: none;
-      filter: drop-shadow(0 26px 40px rgba(0, 0, 0, 0.35));
+      filter: drop-shadow(0 28px 48px rgba(0, 0, 0, 0.45));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(18px);
     }
 
     #hud {
       position: absolute;
+      z-index: 6;
       top: max(12px, env(safe-area-inset-top));
-      left: 12px;
-      right: 12px;
-      z-index: 5;
-      pointer-events: none;
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 10px;
-    }
-
-    .card {
-      pointer-events: auto;
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
-      backdrop-filter: blur(18px);
+      gap: 12px;
+      pointer-events: none;
     }
 
     #statusCard {
-      min-width: 190px;
-      max-width: min(360px, calc(100vw - 24px));
-      padding: 12px 14px;
+      pointer-events: auto;
+      width: min(360px, calc(100vw - 88px));
+      padding: 12px 13px;
     }
 
     #title {
-      margin: 0 0 8px;
-      font-weight: 900;
-      letter-spacing: 0.01em;
+      margin: 0 0 7px;
       font-size: 15px;
+      font-weight: 950;
+      letter-spacing: -0.02em;
     }
 
     .statusLine {
@@ -122,8 +131,9 @@
       width: 9px;
       height: 9px;
       flex: 0 0 auto;
-      border-radius: 99px;
+      border-radius: 999px;
       background: var(--warn);
+      color: var(--warn);
       box-shadow: 0 0 14px currentColor;
     }
 
@@ -141,139 +151,53 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 6px;
-      margin-top: 10px;
-      font-size: 11px;
+      margin-top: 9px;
+      font-size: 10.5px;
       color: var(--muted);
     }
 
     #metrics span {
-      padding: 6px 8px;
-      border-radius: 11px;
+      padding: 6px 7px;
+      border-radius: 12px;
       background: rgba(255, 255, 255, 0.06);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    #startPanel {
-      position: absolute;
-      inset: 0;
-      z-index: 10;
+    #githubButton {
+      pointer-events: auto;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      border-radius: 999px;
       display: grid;
       place-items: center;
-      padding: 20px;
-      background: radial-gradient(circle at 50% 45%, rgba(110, 214, 255, 0.14), rgba(5, 7, 13, 0.74) 54%, rgba(5, 7, 13, 0.92));
+      color: white;
+      text-decoration: none;
+      background: rgba(8, 12, 22, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(18px);
     }
 
-    #startBox {
-      width: min(560px, 100%);
-      padding: 22px;
-      text-align: center;
-      background: var(--panelStrong);
-      border: 1px solid var(--line);
-      border-radius: 26px;
-      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
-    }
-
-    #startBox h1 {
-      margin: 0 0 10px;
-      font-size: clamp(27px, 8vw, 46px);
-      line-height: 0.95;
-      letter-spacing: -0.05em;
-    }
-
-    #startBox p {
-      margin: 0 auto 16px;
-      max-width: 450px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.42;
-    }
-
-    button {
-      appearance: none;
-      border: 0;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #dcf8ff 0%, #65d9ff 100%);
-      color: #03131d;
-      font-weight: 950;
-      font-size: 16px;
-      padding: 14px 20px;
-      min-height: 48px;
-      cursor: pointer;
-      box-shadow: 0 14px 32px rgba(64, 204, 255, 0.25);
-    }
-
-    button:disabled {
-      opacity: 0.64;
-      cursor: wait;
-    }
-
-    #startError {
-      display: none;
-      margin-top: 14px;
-      padding: 11px 12px;
-      border-radius: 14px;
-      text-align: left;
-      color: #ffd6d6;
-      background: rgba(255, 115, 115, 0.10);
-      border: 1px solid rgba(255, 115, 115, 0.28);
-      font-size: 13px;
-      line-height: 1.35;
-      white-space: pre-line;
-    }
-
-    #startLog {
-      display: none;
-      margin: 12px auto 0;
-      max-width: 430px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-      white-space: pre-line;
-      text-align: left;
-    }
-
-    #permissionStatus {
-      margin: 10px auto 0;
-      max-width: 430px;
-      display: none;
-      gap: 8px;
-      align-items: flex-start;
-      text-align: left;
-      padding: 10px 11px;
-      border-radius: 14px;
-      color: #dff7ff;
-      background: rgba(110, 214, 255, 0.08);
-      border: 1px solid rgba(110, 214, 255, 0.22);
-      font-size: 12px;
-      line-height: 1.35;
-      white-space: pre-line;
-    }
-
-    #permissionStatus.warn {
-      color: #fff0bf;
-      background: rgba(255, 211, 110, 0.10);
-      border-color: rgba(255, 211, 110, 0.30);
-    }
-
-    #permissionStatus.bad {
-      color: #ffd6d6;
-      background: rgba(255, 115, 115, 0.10);
-      border-color: rgba(255, 115, 115, 0.30);
+    #githubButton svg {
+      width: 27px;
+      height: 27px;
+      display: block;
     }
 
     #viewfinder {
       position: absolute;
+      z-index: 5;
       right: max(12px, env(safe-area-inset-right));
       bottom: max(12px, env(safe-area-inset-bottom));
-      z-index: 6;
-      width: min(42vw, 220px);
+      width: min(45vw, 230px);
       aspect-ratio: 4 / 3;
       overflow: hidden;
-      border-radius: 18px;
+      border-radius: 20px;
       border: 1px solid rgba(255, 255, 255, 0.28);
-      box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 20px 56px rgba(0, 0, 0, 0.55);
       background: #101827;
     }
 
@@ -298,31 +222,31 @@
 
     #viewfinderLabel {
       position: absolute;
+      z-index: 3;
       left: 8px;
       top: 8px;
-      z-index: 3;
       padding: 4px 7px;
       border-radius: 999px;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.52);
       color: #fff;
       font-size: 10px;
-      font-weight: 900;
+      font-weight: 950;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
     #noHandBanner {
       position: absolute;
+      z-index: 5;
       left: 50%;
       bottom: max(124px, calc(env(safe-area-inset-bottom) + 124px));
-      z-index: 5;
       transform: translateX(-50%);
       padding: 10px 14px;
       border-radius: 999px;
-      background: rgba(255, 115, 115, 0.12);
-      border: 1px solid rgba(255, 115, 115, 0.34);
+      background: rgba(255, 115, 115, 0.14);
+      border: 1px solid rgba(255, 115, 115, 0.36);
       color: #ffd6d6;
-      font-weight: 900;
+      font-weight: 950;
       font-size: 13px;
       text-align: center;
       opacity: 0;
@@ -337,10 +261,10 @@
 
     #tips {
       position: absolute;
+      z-index: 4;
       left: max(12px, env(safe-area-inset-left));
       bottom: max(12px, env(safe-area-inset-bottom));
-      z-index: 4;
-      width: min(46vw, 310px);
+      width: min(47vw, 330px);
       padding: 10px 12px;
       color: var(--muted);
       font-size: 12px;
@@ -354,10 +278,87 @@
       font-size: 12px;
     }
 
-    @media (max-width: 520px) {
+    #startPanel {
+      position: absolute;
+      inset: 0;
+      z-index: 12;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: radial-gradient(circle at 50% 45%, rgba(112, 220, 255, 0.16), rgba(5, 7, 13, 0.75) 55%, rgba(5, 7, 13, 0.92));
+    }
+
+    #startBox {
+      width: min(580px, 100%);
+      padding: 22px;
+      text-align: center;
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: 0 24px 86px rgba(0, 0, 0, 0.5);
+    }
+
+    #startBox h1 {
+      margin: 0 0 10px;
+      font-size: clamp(29px, 8vw, 50px);
+      line-height: 0.94;
+      letter-spacing: -0.055em;
+    }
+
+    #startBox p {
+      margin: 0 auto 16px;
+      max-width: 470px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.42;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #e4fbff 0%, #65d9ff 100%);
+      color: #03131d;
+      font-weight: 950;
+      font-size: 16px;
+      padding: 14px 20px;
+      min-height: 48px;
+      cursor: pointer;
+      box-shadow: 0 14px 32px rgba(64, 204, 255, 0.25);
+    }
+
+    button:disabled {
+      opacity: 0.66;
+      cursor: wait;
+    }
+
+    #startLog,
+    #startError {
+      display: none;
+      margin: 12px auto 0;
+      max-width: 460px;
+      text-align: left;
+      white-space: pre-line;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    #startLog {
+      color: var(--muted);
+    }
+
+    #startError {
+      padding: 11px 12px;
+      border-radius: 15px;
+      color: #ffd6d6;
+      background: rgba(255, 115, 115, 0.11);
+      border: 1px solid rgba(255, 115, 115, 0.30);
+    }
+
+    @media (max-width: 560px) {
       #statusCard {
+        width: min(330px, calc(100vw - 84px));
         padding: 10px 11px;
-        min-width: 174px;
       }
 
       #metrics {
@@ -365,38 +366,47 @@
       }
 
       #tips {
-        width: min(50vw, 240px);
+        width: min(50vw, 245px);
         font-size: 11px;
       }
 
       #viewfinder {
-        width: min(44vw, 185px);
+        width: min(45vw, 185px);
       }
     }
   </style>
 </head>
 <body>
   <div id="app">
-    <div id="stage" aria-label="Three dimensional hand model">
-      <div id="stageFallback">HAND</div>
+    <div id="stage" aria-label="Three dimensional animated hand model">
+      <div id="stageFallback">HAND<br>TRACK</div>
     </div>
 
     <div id="hud">
       <section id="statusCard" class="card" aria-live="polite">
-        <p id="title">3D Hand Tracking</p>
+        <p id="title">HandTrack3D</p>
         <div class="statusLine"><span id="stateDot" class="dot"></span><span id="statusText">Waiting to start.</span></div>
         <div id="metrics">
           <span id="handedness">Hand: none</span>
           <span id="confidence">Confidence: 0%</span>
           <span id="fps">FPS: --</span>
-          <span id="modelMode">Model: procedural rig</span>
+          <span id="trackedFrames">Tracked: 0</span>
+          <span id="videoSize">Video: --</span>
+          <span id="modelMode">Model: loading</span>
+          <span id="analyzedFrames">Analyzed: 0</span>
+          <span id="trackerMode">Tracker: --</span>
         </div>
       </section>
+      <a id="githubButton" href="https://github.com/Brandon-Valley/HandTrack3D" target="_blank" rel="noopener noreferrer" aria-label="Open GitHub repository">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.65 7.65 0 0 1 8 3.86c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+        </svg>
+      </a>
     </div>
 
     <section id="tips" class="card">
       <strong>How to use</strong>
-      Hold one hand in the selfie camera. Open and close your fingers, twist your wrist, and move closer or farther away.
+      Hold one open hand in the selfie camera. Keep your full hand in the little camera box, good lighting helps, and move slowly for the first second.
     </section>
 
     <div id="viewfinder" class="card" aria-label="Selfie camera viewfinder">
@@ -412,9 +422,8 @@
     <div id="startPanel">
       <div id="startBox">
         <h1>Hand tracking 3D demo</h1>
-        <p>This uses your front camera, detects 21 hand landmarks, and drives a 3D hand rig in real time. It works best from HTTPS, like GitHub Pages, or from localhost.</p>
-        <button id="startButton" type="button">Request camera permission</button>
-        <div id="permissionStatus"></div>
+        <p>This version fixes the detection loop, lowers the hand-recognition thresholds, adds live debug counters, and loads a real online Valve-style hand GLB asset when available.</p>
+        <button id="startButton" type="button">Start front camera</button>
         <div id="startLog"></div>
         <div id="startError"></div>
       </div>
@@ -426,8 +435,13 @@
       "use strict";
 
       var THREE = null;
+      var GLTFLoader = null;
       var FilesetResolver = null;
       var HandLandmarker = null;
+
+      var HAND_ASSET_URL = "https://cdn.jsdelivr.net/gh/GodotVR/godot_openxr_for_godot_3.x@e983d79365cf5a59052e6242dba083a467020dee/demo/addons/godot-openxr/assets/valve_hand_models/right_hand.glb";
+      var MEDIAPIPE_WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+      var MEDIAPIPE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 
       var HAND_CONNECTIONS = [
         [0, 1], [1, 2], [2, 3], [3, 4],
@@ -435,12 +449,20 @@
         [0, 9], [9, 10], [10, 11], [11, 12],
         [0, 13], [13, 14], [14, 15], [15, 16],
         [0, 17], [17, 18], [18, 19], [19, 20],
-        [5, 9], [9, 13], [13, 17]
+        [5, 9], [9, 13], [13, 17], [5, 17]
       ];
 
-      var PALM_INDICES = [0, 5, 9, 0, 9, 13, 0, 13, 17, 5, 9, 13, 5, 13, 17];
+      var FINGERS = {
+        thumb: [1, 2, 3, 4],
+        index: [5, 6, 7, 8],
+        middle: [9, 10, 11, 12],
+        ring: [13, 14, 15, 16],
+        pinky: [17, 18, 19, 20]
+      };
+
       var TIP_INDICES = { 4: true, 8: true, 12: true, 16: true, 20: true };
       var MCP_INDICES = { 5: true, 9: true, 13: true, 17: true };
+      var PALM_TRIANGLES = [0, 5, 9, 0, 9, 13, 0, 13, 17, 5, 9, 13, 5, 13, 17];
 
       var video = document.getElementById("video");
       var overlay = document.getElementById("overlay");
@@ -448,238 +470,126 @@
       var stageFallback = document.getElementById("stageFallback");
       var startPanel = document.getElementById("startPanel");
       var startButton = document.getElementById("startButton");
-      var startError = document.getElementById("startError");
       var startLog = document.getElementById("startLog");
-      var permissionStatus = document.getElementById("permissionStatus");
+      var startError = document.getElementById("startError");
       var statusText = document.getElementById("statusText");
       var stateDot = document.getElementById("stateDot");
       var handednessEl = document.getElementById("handedness");
       var confidenceEl = document.getElementById("confidence");
       var fpsEl = document.getElementById("fps");
+      var trackedFramesEl = document.getElementById("trackedFrames");
+      var analyzedFramesEl = document.getElementById("analyzedFrames");
+      var trackerModeEl = document.getElementById("trackerMode");
+      var videoSizeEl = document.getElementById("videoSize");
+      var modelModeEl = document.getElementById("modelMode");
       var noHandBanner = document.getElementById("noHandBanner");
+      var overlayCtx = overlay.getContext("2d", { alpha: true });
 
       var renderer = null;
       var scene = null;
       var camera = null;
       var modelGroup = null;
+      var rigGroup = null;
       var gridGroup = null;
-      var cylinderGeometry = null;
-      var sphereGeometry = null;
-      var palmGeometry = null;
-      var palmMesh = null;
-      var segments = [];
-      var joints = [];
+      var assetRoot = null;
+      var assetBoneMap = {};
+      var assetBoneCount = 0;
+      var assetMappedCount = 0;
       var handLandmarker = null;
-      var overlayCtx = overlay.getContext("2d", { alpha: true });
-
+      var trackerQuality = "GPU normal";
       var running = false;
       var librariesLoaded = false;
       var sceneReady = false;
-      var lastVideoTime = -1;
-      var lastDetectTime = 0;
+      var relaxedTrackerTried = false;
+      var analyzedFrames = 0;
+      var trackedFrames = 0;
       var noHandFrames = 0;
-      var defaultPoints = null;
-      var smoothedPoints = null;
-      var targetPoints = null;
-      var targetGroupPosition = null;
-      var currentGroupPosition = null;
+      var lastDetectTime = 0;
       var lastFrameTime = performance.now();
       var fps = 0;
+
       var yAxis = null;
-      var tempVec1 = null;
-      var tempVec2 = null;
+      var tempA = null;
+      var tempB = null;
+      var tempC = null;
+      var tempD = null;
+      var defaultPoints = null;
+      var targetPoints = null;
+      var smoothedPoints = null;
+      var targetGroupPosition = null;
+      var currentGroupPosition = null;
+      var targetGroupQuaternion = null;
+      var currentGroupQuaternion = null;
+      var segments = [];
+      var joints = [];
+      var nails = [];
+      var palmMesh = null;
+      var palmGeometry = null;
+      var lastLandmarks = null;
 
       startButton.addEventListener("click", startDemo);
       window.addEventListener("resize", resizeAll);
-      window.addEventListener("orientationchange", function () {
-        setTimeout(resizeAll, 250);
-      });
+      window.addEventListener("orientationchange", function () { setTimeout(resizeAll, 250); });
       initOverlaySize();
-      showStartupNote(getStartupReadyMessage());
-      updatePermissionStatus("Ready. Tap the button. The very first thing this page will do is call the browser camera permission request.", "");
-      checkInitialPermissionState();
+      showStartupNote(getReadyMessage());
+      trackerModeEl.textContent = "Tracker: waiting";
+      modelModeEl.textContent = "Model: Valve GLB + rig";
 
       async function startDemo() {
         startButton.disabled = true;
-        startButton.textContent = "Requesting camera...";
+        startButton.textContent = "Starting camera...";
         startError.style.display = "none";
         startError.textContent = "";
-        updatePermissionStatus("Opening the real browser camera permission request now. Choose Allow if Chrome shows the prompt.", "warn");
-        showStartupNote("Requesting camera first, before loading the 3D/tracking code. This gives Android Chrome the cleanest chance to show its native permission pop-up.");
         setStatus("Requesting front camera...", "warn");
+        showStartupNote("Requesting camera first. After camera starts, the page loads Three.js, MediaPipe, and the online hand GLB asset.");
 
         try {
-          await updatePermissionStateNote("Before request");
           await initCameraWithFallbacks();
-          await updatePermissionStateNote("After request");
-          startButton.textContent = "Loading demo...";
-          setStatus("Camera on. Loading 3D demo...", "warn");
-          showStartupNote("Camera permission is working. Loading Three.js and MediaPipe now...");
+          videoSizeEl.textContent = "Video: " + (video.videoWidth || "?") + "x" + (video.videoHeight || "?");
+          startButton.textContent = "Loading libraries...";
+          setStatus("Camera on. Loading libraries...", "warn");
           await loadLibraries();
           setupThreeScene();
-          setStatus("Loading hand tracker model...", "warn");
-          showStartupNote("Camera is on. Loading the hand tracker model...");
-          await initLandmarker();
+          startButton.textContent = "Loading hand asset...";
+          await loadHandAsset();
+          startButton.textContent = "Loading tracker...";
+          await initLandmarker(false);
           running = true;
           startPanel.style.display = "none";
-          setStatus("Camera on. Show one hand.", "warn");
+          setStatus("Camera on. Show one open hand.", "warn");
+          trackerModeEl.textContent = "Tracker: " + trackerQuality;
         } catch (err) {
           console.error(err);
           running = false;
           stopCamera();
           startButton.disabled = false;
-          startButton.textContent = "Try permission pop-up again";
+          startButton.textContent = "Try again";
           setStatus("Could not start.", "bad");
           startError.textContent = getFriendlyError(err);
           startError.style.display = "block";
-          updatePermissionStatus("Startup stopped. The details below explain whether this is a blocked site permission, an Android app permission problem, or a content:// file problem.", "bad");
-          showStartupNote("Startup stopped. The error details are shown below.");
+          showStartupNote("Startup stopped. The exact error is below.");
         }
       }
 
-      async function loadLibraries() {
-        if (librariesLoaded) return;
-        if (!supportsDynamicImport()) {
-          throw new Error("This browser does not support JavaScript module imports. Open the file in current Chrome, Safari, or Edge.");
+      function getReadyMessage() {
+        if (!window.isSecureContext) {
+          return "This must run from HTTPS or localhost for camera access. GitHub Pages is the right place to test it.";
         }
-        setStatus("Loading 3D and tracking code...", "warn");
-        showStartupNote("Loading Three.js and MediaPipe from CDN...");
-
-        var threeUrl = "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js";
-        var mediapipeUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
-        var loaded = await Promise.all([
-          import(threeUrl),
-          import(mediapipeUrl)
-        ]);
-        THREE = loaded[0];
-        FilesetResolver = loaded[1].FilesetResolver;
-        HandLandmarker = loaded[1].HandLandmarker;
-        librariesLoaded = true;
-      }
-
-      function supportsDynamicImport() {
-        try {
-          new Function("return import('data:text/javascript,export default 1')");
-          return true;
-        } catch (err) {
-          return false;
-        }
-      }
-
-      function setupThreeScene() {
-        if (sceneReady) return;
-
-        yAxis = new THREE.Vector3(0, 1, 0);
-        tempVec1 = new THREE.Vector3();
-        tempVec2 = new THREE.Vector3();
-        targetGroupPosition = new THREE.Vector3(0, -0.1, 0);
-        currentGroupPosition = new THREE.Vector3(0, -0.1, 0);
-
-        defaultPoints = [
-          [0.00, -1.18, 0.00],
-          [-0.56, -0.78, 0.05], [-0.88, -0.36, 0.08], [-1.08, 0.04, 0.07], [-1.26, 0.42, 0.03],
-          [-0.48, -0.24, 0.02], [-0.58, 0.38, 0.06], [-0.64, 0.92, 0.04], [-0.68, 1.38, 0.00],
-          [-0.12, -0.12, 0.02], [-0.14, 0.58, 0.08], [-0.16, 1.22, 0.06], [-0.18, 1.78, 0.02],
-          [0.26, -0.20, 0.02], [0.34, 0.42, 0.07], [0.40, 0.98, 0.05], [0.44, 1.46, 0.02],
-          [0.60, -0.36, 0.00], [0.78, 0.16, 0.05], [0.90, 0.62, 0.03], [1.00, 1.02, 0.00]
-        ].map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); });
-
-        smoothedPoints = defaultPoints.map(function (p) { return p.clone(); });
-        targetPoints = defaultPoints.map(function (p) { return p.clone(); });
-
-        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.outputColorSpace = THREE.SRGBColorSpace;
-        stageFallback.style.display = "none";
-        stage.appendChild(renderer.domElement);
-
-        scene = new THREE.Scene();
-        camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(0, 0.15, 8.2);
-
-        scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x10172a, 2.8));
-
-        var key = new THREE.DirectionalLight(0xffffff, 2.3);
-        key.position.set(2.8, 4.2, 4.6);
-        scene.add(key);
-
-        var rim = new THREE.DirectionalLight(0x7ddfff, 1.2);
-        rim.position.set(-4.0, 1.4, -2.2);
-        scene.add(rim);
-
-        modelGroup = new THREE.Group();
-        modelGroup.position.copy(currentGroupPosition);
-        scene.add(modelGroup);
-
-        gridGroup = new THREE.Group();
-        scene.add(gridGroup);
-        makeBackgroundGrid(gridGroup);
-
-        var skinMat = new THREE.MeshStandardMaterial({ color: 0xe7a27b, roughness: 0.56, metalness: 0.02 });
-        var palmMat = new THREE.MeshStandardMaterial({ color: 0xf0b18c, roughness: 0.62, metalness: 0, transparent: true, opacity: 0.62, side: THREE.DoubleSide });
-        var jointMat = new THREE.MeshStandardMaterial({ color: 0xffd4bd, roughness: 0.5, metalness: 0.01 });
-        var tipMat = new THREE.MeshStandardMaterial({ color: 0x90f4ff, emissive: 0x0b89a0, emissiveIntensity: 0.55, roughness: 0.38, metalness: 0.02 });
-        var mcpMat = new THREE.MeshStandardMaterial({ color: 0xffc197, emissive: 0x5a2106, emissiveIntensity: 0.12, roughness: 0.5, metalness: 0.01 });
-
-        cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 18, 1, false);
-        sphereGeometry = new THREE.SphereGeometry(1, 18, 12);
-
-        segments = HAND_CONNECTIONS.map(function (pair) {
-          var mesh = new THREE.Mesh(cylinderGeometry, skinMat);
-          mesh.userData.a = pair[0];
-          mesh.userData.b = pair[1];
-          modelGroup.add(mesh);
-          return mesh;
-        });
-
-        joints = defaultPoints.map(function (_, index) {
-          var mat = TIP_INDICES[index] ? tipMat : MCP_INDICES[index] ? mcpMat : jointMat;
-          var mesh = new THREE.Mesh(sphereGeometry, mat);
-          modelGroup.add(mesh);
-          return mesh;
-        });
-
-        palmGeometry = new THREE.BufferGeometry();
-        palmGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(PALM_INDICES.length * 3), 3));
-        palmMesh = new THREE.Mesh(palmGeometry, palmMat);
-        modelGroup.add(palmMesh);
-
-        applyPoints(defaultPoints, true);
-        sceneReady = true;
-        animate();
+        return "Ready. Tap Start front camera, allow camera access, then hold one open hand fully inside the camera box.";
       }
 
       async function initCameraWithFallbacks() {
         if (!window.isSecureContext) {
-          throw new Error("Camera access needs a secure context. Use HTTPS, GitHub Pages, or localhost. Opening this as a downloaded file usually will not work on mobile.");
+          throw new Error("Camera access needs HTTPS or localhost. Open the GitHub Pages URL, not a downloaded file.");
         }
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("This browser does not expose navigator.mediaDevices.getUserMedia. Use current Chrome, Safari, or Edge.");
+          throw new Error("This browser does not expose navigator.mediaDevices.getUserMedia.");
         }
 
         var attempts = [
-          {
-            audio: false,
-            video: {
-              facingMode: { ideal: "user" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              frameRate: { ideal: 30, max: 60 }
-            }
-          },
-          {
-            audio: false,
-            video: {
-              facingMode: "user",
-              width: { ideal: 960 },
-              height: { ideal: 540 }
-            }
-          },
-          {
-            audio: false,
-            video: true
-          }
+          { audio: false, video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 60 } } },
+          { audio: false, video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 } } },
+          { audio: false, video: true }
         ];
 
         var lastErr = null;
@@ -689,14 +599,14 @@
             video.srcObject = stream;
             video.setAttribute("playsinline", "");
             video.muted = true;
-            await waitForVideoReady(video, 8000);
+            await waitForVideoReady(video, 9000);
             await safeVideoPlay(video);
             initOverlaySize();
             return;
           } catch (err) {
             lastErr = err;
             stopCamera();
-            showStartupNote("Camera attempt " + (i + 1) + " failed. Trying fallback...");
+            showStartupNote("Camera attempt " + (i + 1) + " failed. Trying fallback camera settings...");
           }
         }
         throw lastErr || new Error("No usable camera stream was found.");
@@ -753,9 +663,7 @@
         try {
           await el.play();
         } catch (err) {
-          if (!/AbortError/i.test(String(err && err.name ? err.name : err))) {
-            throw err;
-          }
+          if (!/AbortError/i.test(String(err && err.name ? err.name : err))) throw err;
         }
       }
 
@@ -766,32 +674,246 @@
         if (video) video.srcObject = null;
       }
 
-      async function initLandmarker() {
-        var vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
-        var baseOptions = {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+      async function loadLibraries() {
+        if (librariesLoaded) return;
+        if (!supportsDynamicImport()) {
+          throw new Error("This browser does not support dynamic JavaScript imports. Use current Chrome, Safari, or Edge.");
+        }
+
+        showStartupNote("Loading Three.js, GLTFLoader, and MediaPipe Tasks Vision...");
+        var loaded = await Promise.all([
+          import("three"),
+          import("https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/loaders/GLTFLoader.js"),
+          import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs")
+        ]);
+        THREE = loaded[0];
+        GLTFLoader = loaded[1].GLTFLoader;
+        FilesetResolver = loaded[2].FilesetResolver;
+        HandLandmarker = loaded[2].HandLandmarker;
+        librariesLoaded = true;
+      }
+
+      function supportsDynamicImport() {
+        try {
+          new Function("return import('data:text/javascript,export default 1')");
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      function setupThreeScene() {
+        if (sceneReady) return;
+
+        yAxis = new THREE.Vector3(0, 1, 0);
+        tempA = new THREE.Vector3();
+        tempB = new THREE.Vector3();
+        tempC = new THREE.Vector3();
+        tempD = new THREE.Vector3();
+        targetGroupPosition = new THREE.Vector3(0, -0.1, 0);
+        currentGroupPosition = targetGroupPosition.clone();
+        targetGroupQuaternion = new THREE.Quaternion();
+        currentGroupQuaternion = new THREE.Quaternion();
+
+        defaultPoints = makeDefaultPoints();
+        targetPoints = defaultPoints.map(function (p) { return p.clone(); });
+        smoothedPoints = defaultPoints.map(function (p) { return p.clone(); });
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        stageFallback.style.display = "none";
+        stage.appendChild(renderer.domElement);
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0.05, 8.3);
+
+        scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x15182c, 3.0));
+        var key = new THREE.DirectionalLight(0xffffff, 2.4);
+        key.position.set(2.8, 4.4, 4.8);
+        scene.add(key);
+        var rim = new THREE.DirectionalLight(0x76e3ff, 1.5);
+        rim.position.set(-4.4, 1.0, -2.4);
+        scene.add(rim);
+
+        modelGroup = new THREE.Group();
+        modelGroup.position.copy(currentGroupPosition);
+        scene.add(modelGroup);
+
+        rigGroup = new THREE.Group();
+        modelGroup.add(rigGroup);
+
+        gridGroup = new THREE.Group();
+        scene.add(gridGroup);
+        makeBackgroundGrid(gridGroup);
+        buildFallbackRig();
+        applyPoints(defaultPoints, true);
+
+        sceneReady = true;
+        animate();
+      }
+
+      function makeDefaultPoints() {
+        return [
+          [0.00, -1.18, 0.00],
+          [-0.56, -0.78, 0.05], [-0.88, -0.36, 0.08], [-1.08, 0.04, 0.07], [-1.26, 0.42, 0.03],
+          [-0.48, -0.24, 0.02], [-0.58, 0.38, 0.06], [-0.64, 0.92, 0.04], [-0.68, 1.38, 0.00],
+          [-0.12, -0.12, 0.02], [-0.14, 0.58, 0.08], [-0.16, 1.22, 0.06], [-0.18, 1.78, 0.02],
+          [0.26, -0.20, 0.02], [0.34, 0.42, 0.07], [0.40, 0.98, 0.05], [0.44, 1.46, 0.02],
+          [0.60, -0.36, 0.00], [0.78, 0.16, 0.05], [0.90, 0.62, 0.03], [1.00, 1.02, 0.00]
+        ].map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); });
+      }
+
+      function buildFallbackRig() {
+        var skinMat = new THREE.MeshStandardMaterial({ color: 0xe9a47b, roughness: 0.58, metalness: 0.02 });
+        var palmMat = new THREE.MeshStandardMaterial({ color: 0xf0b18c, roughness: 0.64, metalness: 0, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
+        var jointMat = new THREE.MeshStandardMaterial({ color: 0xffd1b8, roughness: 0.48, metalness: 0.01 });
+        var tipMat = new THREE.MeshStandardMaterial({ color: 0xffbf9f, roughness: 0.42, metalness: 0.01 });
+        var nailMat = new THREE.MeshStandardMaterial({ color: 0xffeee8, roughness: 0.34, metalness: 0.02 });
+        var knuckleMat = new THREE.MeshStandardMaterial({ color: 0xf6b28f, roughness: 0.46, metalness: 0.01 });
+        var cylGeom = new THREE.CylinderGeometry(1, 1, 1, 22, 1, false);
+        var sphereGeom = new THREE.SphereGeometry(1, 24, 14);
+
+        segments = HAND_CONNECTIONS.slice(0, 20).map(function (pair) {
+          var mesh = new THREE.Mesh(cylGeom, skinMat);
+          mesh.userData.a = pair[0];
+          mesh.userData.b = pair[1];
+          rigGroup.add(mesh);
+          return mesh;
+        });
+
+        joints = defaultPoints.map(function (_, index) {
+          var mat = TIP_INDICES[index] ? tipMat : MCP_INDICES[index] ? knuckleMat : jointMat;
+          var mesh = new THREE.Mesh(sphereGeom, mat);
+          rigGroup.add(mesh);
+          return mesh;
+        });
+
+        [4, 8, 12, 16, 20].forEach(function (index) {
+          var nail = new THREE.Mesh(sphereGeom, nailMat);
+          nail.userData.index = index;
+          rigGroup.add(nail);
+          nails.push(nail);
+        });
+
+        palmGeometry = new THREE.BufferGeometry();
+        palmGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(PALM_TRIANGLES.length * 3), 3));
+        palmMesh = new THREE.Mesh(palmGeometry, palmMat);
+        rigGroup.add(palmMesh);
+      }
+
+      async function loadHandAsset() {
+        modelModeEl.textContent = "Model: loading GLB";
+        if (!GLTFLoader) {
+          modelModeEl.textContent = "Model: fallback rig";
+          return;
+        }
+
+        showStartupNote("Loading online Valve-style hand GLB asset from the Godot OpenXR demo repo. If it fails, the built-in rig still works.");
+        var loader = new GLTFLoader();
+        try {
+          var gltf = await new Promise(function (resolve, reject) {
+            loader.load(HAND_ASSET_URL, resolve, undefined, reject);
+          });
+          assetRoot = gltf.scene;
+          assetRoot.name = "Valve style hand GLB asset";
+          normalizeAsset(assetRoot);
+          assetRoot.visible = true;
+          modelGroup.add(assetRoot);
+          mapAssetBones(assetRoot);
+          if (assetMappedCount >= 6) {
+            rigGroup.visible = false;
+            modelModeEl.textContent = "Model: Valve GLB bones " + assetMappedCount + "/" + assetBoneCount;
+          } else {
+            rigGroup.visible = true;
+            assetRoot.visible = false;
+            modelModeEl.textContent = "Model: rig fallback, GLB loaded " + assetBoneCount + " bones";
+          }
+        } catch (err) {
+          console.warn("Hand GLB asset failed to load. Using fallback rig.", err);
+          assetRoot = null;
+          rigGroup.visible = true;
+          modelModeEl.textContent = "Model: fallback rig";
+        }
+      }
+
+      function normalizeAsset(root) {
+        root.traverse(function (obj) {
+          if (obj.isMesh || obj.isSkinnedMesh) {
+            obj.frustumCulled = false;
+            if (obj.material) {
+              var materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+              materials.forEach(function (mat) {
+                if (mat.color && mat.color.isColor) mat.color.lerp(new THREE.Color(0xf0b18c), 0.18);
+                mat.roughness = mat.roughness === undefined ? 0.58 : mat.roughness;
+                mat.metalness = mat.metalness === undefined ? 0.03 : mat.metalness;
+              });
+            }
+          }
+        });
+        var box = new THREE.Box3().setFromObject(root);
+        var size = new THREE.Vector3();
+        var center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+        root.position.sub(center);
+        var maxDim = Math.max(size.x, size.y, size.z, 0.001);
+        var scale = 2.65 / maxDim;
+        root.scale.setScalar(scale);
+        root.rotation.set(0, Math.PI, Math.PI * 0.02);
+      }
+
+      function mapAssetBones(root) {
+        assetBoneMap = {};
+        assetBoneCount = 0;
+        assetMappedCount = 0;
+        var allBones = [];
+        root.traverse(function (obj) {
+          if (obj.isBone) {
+            assetBoneCount++;
+            allBones.push(obj);
+          }
+        });
+        var fingers = ["thumb", "index", "middle", "ring", "pinky"];
+        fingers.forEach(function (finger) {
+          var aliases = finger === "pinky" ? ["pinky", "little"] : [finger];
+          var matches = allBones.filter(function (bone) {
+            var name = bone.name.toLowerCase();
+            return aliases.some(function (alias) { return name.indexOf(alias) >= 0; });
+          });
+          matches.sort(function (a, b) { return a.name.localeCompare(b.name); });
+          assetBoneMap[finger] = matches.slice(0, 4);
+          assetMappedCount += assetBoneMap[finger].length;
+        });
+      }
+
+      async function initLandmarker(relaxed) {
+        var vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
+        var options = {
+          baseOptions: { modelAssetPath: MEDIAPIPE_MODEL_URL, delegate: relaxed ? "CPU" : "GPU" },
+          runningMode: "VIDEO",
+          numHands: 1,
+          minHandDetectionConfidence: relaxed ? 0.12 : 0.25,
+          minHandPresenceConfidence: relaxed ? 0.12 : 0.25,
+          minTrackingConfidence: relaxed ? 0.12 : 0.25
         };
 
         try {
-          handLandmarker = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: Object.assign({}, baseOptions, { delegate: "GPU" }),
-            runningMode: "VIDEO",
-            numHands: 1,
-            minHandDetectionConfidence: 0.52,
-            minHandPresenceConfidence: 0.52,
-            minTrackingConfidence: 0.48
-          });
+          if (handLandmarker && handLandmarker.close) handLandmarker.close();
+        } catch (err) {}
+
+        try {
+          handLandmarker = await HandLandmarker.createFromOptions(vision, options);
+          trackerQuality = relaxed ? "CPU relaxed" : "GPU low threshold";
         } catch (gpuErr) {
-          console.warn("GPU delegate failed, falling back to CPU.", gpuErr);
-          handLandmarker = await HandLandmarker.createFromOptions(vision, {
-            baseOptions: Object.assign({}, baseOptions, { delegate: "CPU" }),
-            runningMode: "VIDEO",
-            numHands: 1,
-            minHandDetectionConfidence: 0.52,
-            minHandPresenceConfidence: 0.52,
-            minTrackingConfidence: 0.48
-          });
+          console.warn("Tracker delegate failed, using CPU.", gpuErr);
+          options.baseOptions.delegate = "CPU";
+          handLandmarker = await HandLandmarker.createFromOptions(vision, options);
+          trackerQuality = relaxed ? "CPU relaxed" : "CPU low threshold";
         }
+        trackerModeEl.textContent = "Tracker: " + trackerQuality;
       }
 
       function animate() {
@@ -803,26 +925,40 @@
         fps = fps * 0.90 + (1000 / dt) * 0.10;
         lastFrameTime = now;
 
-        if (running && handLandmarker && video.readyState >= 2) {
-          if (video.currentTime !== lastVideoTime && now - lastDetectTime > 8) {
-            lastVideoTime = video.currentTime;
-            lastDetectTime = now;
-            var result = handLandmarker.detectForVideo(video, now);
-            handleResult(result);
-          }
+        if (running && handLandmarker && video.readyState >= 2 && now - lastDetectTime >= 30) {
+          lastDetectTime = now;
+          detectFrame(now);
         }
 
-        var follow = noHandFrames > 10 ? 0.055 : 0.42;
+        var follow = noHandFrames > 10 ? 0.065 : 0.44;
         for (var i = 0; i < smoothedPoints.length; i++) {
           smoothedPoints[i].lerp(targetPoints[i], follow);
         }
         currentGroupPosition.lerp(targetGroupPosition, 0.26);
+        currentGroupQuaternion.slerp(targetGroupQuaternion, 0.24);
         modelGroup.position.copy(currentGroupPosition);
+        modelGroup.quaternion.copy(currentGroupQuaternion);
         applyPoints(smoothedPoints, false);
+        animateAssetFromLandmarks(lastLandmarks);
 
         gridGroup.rotation.z = now * 0.000035;
         renderer.render(scene, camera);
         fpsEl.textContent = "FPS: " + Math.round(fps);
+        videoSizeEl.textContent = "Video: " + (video.videoWidth || "?") + "x" + (video.videoHeight || "?");
+      }
+
+      function detectFrame(now) {
+        analyzedFrames++;
+        analyzedFramesEl.textContent = "Analyzed: " + analyzedFrames;
+        var result = null;
+        try {
+          result = handLandmarker.detectForVideo(video, now);
+        } catch (err) {
+          console.error("detectForVideo failed", err);
+          setStatus("Tracker error. Retrying...", "bad");
+          return;
+        }
+        handleResult(result);
       }
 
       function handleResult(result) {
@@ -832,17 +968,26 @@
         if (!result || !result.landmarks || result.landmarks.length === 0) {
           noHandFrames++;
           if (noHandFrames > 8) {
+            lastLandmarks = null;
             targetPoints = defaultPoints.map(function (p) { return p.clone(); });
             targetGroupPosition.set(0, -0.1, 0);
-            setStatus("No hand detected.", "bad");
+            targetGroupQuaternion.identity();
+            setStatus("No hand detected. Move hand fully into camera box.", "bad");
             noHandBanner.classList.add("show");
             handednessEl.textContent = "Hand: none";
             confidenceEl.textContent = "Confidence: 0%";
+          }
+          if (!relaxedTrackerTried && analyzedFrames > 100 && trackedFrames === 0) {
+            relaxedTrackerTried = true;
+            setStatus("No hand yet. Switching to relaxed CPU tracker...", "warn");
+            initLandmarker(true).catch(function (err) { console.warn(err); });
           }
           return;
         }
 
         noHandFrames = 0;
+        trackedFrames++;
+        trackedFramesEl.textContent = "Tracked: " + trackedFrames;
         noHandBanner.classList.remove("show");
 
         var landmarks = result.landmarks[0];
@@ -852,11 +997,13 @@
         var handScore = handedness ? handedness.score : 0;
         handednessEl.textContent = "Hand: " + handLabel;
         confidenceEl.textContent = "Confidence: " + Math.round(handScore * 100) + "%";
-        setStatus("Hand detected. Animating model.", "good");
+        setStatus("Hand detected. Animating 3D hand.", "good");
 
         drawLandmarks(overlayCtx, landmarks);
         targetPoints = convertLandmarksToThreePoints(landmarks, worldLandmarks);
         updateTargetGroupPosition(landmarks);
+        updateTargetGroupQuaternion(targetPoints);
+        lastLandmarks = landmarks;
       }
 
       function convertLandmarksToThreePoints(imageLandmarks, worldLandmarks) {
@@ -869,8 +1016,8 @@
           var vw = video.videoWidth || 1280;
           var vh = video.videoHeight || 720;
           var aspect = vw / Math.max(1, vh);
-          var viewWidth = 5.25 * Math.min(aspect, 1.9);
-          var viewHeight = 5.6;
+          var viewWidth = 5.4 * Math.min(aspect, 1.9);
+          var viewHeight = 5.7;
           var zScale = 8.5;
           pts = imageLandmarks.map(function (lm) {
             return new THREE.Vector3((0.5 - lm.x) * viewWidth, (0.5 - lm.y) * viewHeight, -lm.z * zScale);
@@ -880,14 +1027,12 @@
         var center = new THREE.Vector3();
         [0, 5, 9, 13, 17].forEach(function (index) { center.add(pts[index]); });
         center.multiplyScalar(1 / 5);
-
         var palmSize = distance(pts[0], pts[9]);
-        var scale = THREE.MathUtils.clamp(1.18 / Math.max(palmSize, 0.08), 0.72, 2.25);
+        var scale = THREE.MathUtils.clamp(1.20 / Math.max(palmSize, 0.08), 0.72, 2.25);
         return pts.map(function (p) { return p.sub(center).multiplyScalar(scale); });
       }
 
       function updateTargetGroupPosition(landmarks) {
-        if (!landmarks || !landmarks.length) return;
         var centerX = 0;
         var centerY = 0;
         var minX = 1;
@@ -901,12 +1046,28 @@
         centerX /= landmarks.length;
         centerY /= landmarks.length;
         var handWidth = Math.max(0.04, maxX - minX);
-        var z = THREE.MathUtils.clamp((0.28 - handWidth) * 7.0, -1.1, 1.4);
-        targetGroupPosition.set((0.5 - centerX) * 3.8, (0.5 - centerY) * 2.5 - 0.1, z);
+        var z = THREE.MathUtils.clamp((0.28 - handWidth) * 7.0, -1.15, 1.55);
+        targetGroupPosition.set((0.5 - centerX) * 3.8, (0.5 - centerY) * 2.55 - 0.1, z);
+      }
+
+      function updateTargetGroupQuaternion(points) {
+        if (!points || points.length < 21) return;
+        var wrist = points[0];
+        var index = points[5];
+        var pinky = points[17];
+        var middle = points[9];
+        var xAxis = tempA.subVectors(pinky, index).normalize();
+        var yLocal = tempB.subVectors(middle, wrist).normalize();
+        var zAxis = tempC.crossVectors(xAxis, yLocal).normalize();
+        if (zAxis.lengthSq() < 0.001) return;
+        yLocal.crossVectors(zAxis, xAxis).normalize();
+        var matrix = new THREE.Matrix4().makeBasis(xAxis, yLocal, zAxis);
+        targetGroupQuaternion.setFromRotationMatrix(matrix);
+        targetGroupQuaternion.slerp(new THREE.Quaternion(), 0.35);
       }
 
       function applyPoints(points, snap) {
-        if (!sceneReady) return;
+        if (!rigGroup || !points || points.length < 21) return;
         var working = snap ? points.map(function (p) { return p.clone(); }) : points;
 
         for (var s = 0; s < segments.length; s++) {
@@ -917,36 +1078,73 @@
         }
 
         for (var i = 0; i < joints.length; i++) {
-          var radius = TIP_INDICES[i] ? 0.072 : MCP_INDICES[i] ? 0.078 : i === 0 ? 0.09 : 0.061;
+          var radius = TIP_INDICES[i] ? 0.083 : MCP_INDICES[i] ? 0.096 : i === 0 ? 0.11 : 0.069;
           joints[i].position.copy(working[i]);
           joints[i].scale.setScalar(radius);
         }
 
+        for (var n = 0; n < nails.length; n++) {
+          var nail = nails[n];
+          var index = nail.userData.index;
+          var baseIndex = index - 1;
+          nail.position.copy(working[index]);
+          tempD.subVectors(working[index], working[baseIndex]).normalize();
+          nail.position.addScaledVector(tempD, 0.028);
+          nail.quaternion.setFromUnitVectors(yAxis, tempD);
+          nail.scale.set(0.055, 0.025, 0.088);
+        }
+
         var pos = palmGeometry.attributes.position.array;
-        for (var p = 0; p < PALM_INDICES.length; p++) {
-          var point = working[PALM_INDICES[p]];
+        for (var p = 0; p < PALM_TRIANGLES.length; p++) {
+          var point = working[PALM_TRIANGLES[p]];
           pos[p * 3 + 0] = point.x;
           pos[p * 3 + 1] = point.y;
-          pos[p * 3 + 2] = point.z - 0.015;
+          pos[p * 3 + 2] = point.z - 0.02;
         }
         palmGeometry.attributes.position.needsUpdate = true;
         palmGeometry.computeVertexNormals();
       }
 
       function placeCylinder(mesh, start, end, radius) {
-        var dir = tempVec1.subVectors(end, start);
+        var dir = tempA.subVectors(end, start);
         var len = Math.max(dir.length(), 0.0001);
-        var mid = tempVec2.copy(start).add(end).multiplyScalar(0.5);
+        var mid = tempB.copy(start).add(end).multiplyScalar(0.5);
         mesh.position.copy(mid);
         mesh.quaternion.setFromUnitVectors(yAxis, dir.normalize());
         mesh.scale.set(radius, len, radius);
       }
 
       function radiusForSegment(a, b) {
-        if (a === 0 || b === 0) return 0.062;
-        if (MCP_INDICES[a] || MCP_INDICES[b]) return 0.055;
-        if (TIP_INDICES[a] || TIP_INDICES[b]) return 0.039;
-        return 0.047;
+        if (a === 0 || b === 0) return 0.070;
+        if (MCP_INDICES[a] || MCP_INDICES[b]) return 0.063;
+        if (TIP_INDICES[a] || TIP_INDICES[b]) return 0.044;
+        return 0.053;
+      }
+
+      function animateAssetFromLandmarks(landmarks) {
+        if (!assetRoot || assetMappedCount < 6 || !landmarks) return;
+        Object.keys(FINGERS).forEach(function (finger) {
+          var chain = FINGERS[finger];
+          var curl = estimateFingerCurl(landmarks, chain);
+          var bones = assetBoneMap[finger] || [];
+          for (var i = 0; i < bones.length; i++) {
+            var bone = bones[i];
+            var amount = curl * (i === 0 ? 0.45 : i === 1 ? 0.85 : 0.75);
+            bone.rotation.x += (-amount - bone.rotation.x) * 0.28;
+          }
+        });
+      }
+
+      function estimateFingerCurl(landmarks, chain) {
+        var a = landmarks[chain[0]];
+        var b = landmarks[chain[1]];
+        var c = landmarks[chain[2]];
+        var d = landmarks[chain[3]];
+        if (!a || !b || !c || !d) return 0;
+        var straight = dist2d(a, d);
+        var folded = dist2d(a, b) + dist2d(b, c) + dist2d(c, d);
+        var ratio = straight / Math.max(0.0001, folded);
+        return THREE.MathUtils.clamp((0.88 - ratio) * 2.4, 0, 1.15);
       }
 
       function drawLandmarks(ctx, landmarks) {
@@ -963,11 +1161,11 @@
           ctx.beginPath();
           ctx.moveTo(p1.x * w, p1.y * h);
           ctx.lineTo(p2.x * w, p2.y * h);
-          ctx.lineWidth = 4;
-          ctx.strokeStyle = "rgba(110, 214, 255, 0.88)";
+          ctx.lineWidth = 5;
+          ctx.strokeStyle = "rgba(110, 214, 255, 0.92)";
           ctx.stroke();
           ctx.lineWidth = 1.5;
-          ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
           ctx.stroke();
         }
 
@@ -975,11 +1173,11 @@
           var p = landmarks[j];
           var tip = !!TIP_INDICES[j];
           ctx.beginPath();
-          ctx.arc(p.x * w, p.y * h, tip ? 6 : 4, 0, Math.PI * 2);
+          ctx.arc(p.x * w, p.y * h, tip ? 7 : 4.5, 0, Math.PI * 2);
           ctx.fillStyle = tip ? "#90f4ff" : "#ffffff";
           ctx.fill();
           ctx.lineWidth = 2;
-          ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.62)";
           ctx.stroke();
         }
         ctx.restore();
@@ -988,7 +1186,6 @@
       function makeBackgroundGrid(group) {
         var lineMat = new THREE.LineBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.09 });
         var ringMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.055 });
-
         for (var r = 1.2; r <= 6.0; r += 0.8) {
           var pts = [];
           for (var i = 0; i <= 128; i++) {
@@ -998,7 +1195,6 @@
           var geom = new THREE.BufferGeometry().setFromPoints(pts);
           group.add(new THREE.Line(geom, ringMat));
         }
-
         for (var j = 0; j < 18; j++) {
           var angle = (j / 18) * Math.PI * 2;
           var rayPts = [
@@ -1042,78 +1238,26 @@
         startLog.style.display = "block";
       }
 
-      function updatePermissionStatus(text, mode) {
-        permissionStatus.textContent = text;
-        permissionStatus.classList.toggle("warn", mode === "warn");
-        permissionStatus.classList.toggle("bad", mode === "bad");
-        permissionStatus.style.display = "block";
-      }
-
-      function getStartupReadyMessage() {
-        var protocol = window.location.protocol || "unknown:";
-        if (protocol === "content:") {
-          return "This is opened as an Android content:// file. I will still ask for camera permission, but Chrome often will not show or remember the normal site permission prompt for downloaded content files. HTTPS, like GitHub Pages, is the reliable way.";
-        }
-        if (!window.isSecureContext) {
-          return "This page is not in a secure browser context. Camera permission usually needs HTTPS or localhost. I will still show the real error if the browser blocks it.";
-        }
-        return "Ready. Tap the button and allow camera permission.";
-      }
-
-      async function checkInitialPermissionState() {
-        var state = await getCameraPermissionState();
-        if (state === "granted") {
-          updatePermissionStatus("Camera permission state: granted. Tap the button to start.", "");
-        } else if (state === "prompt") {
-          updatePermissionStatus("Camera permission state: prompt. Tap the button and Chrome should show the native Allow / Block pop-up.", "");
-        } else if (state === "denied") {
-          updatePermissionStatus("Camera permission state: denied. Chrome may not show the pop-up again until this site is changed from Block to Allow in browser settings.", "bad");
-        } else if ((window.location.protocol || "") === "content:") {
-          updatePermissionStatus("Opened from content://. Android may treat this as a downloaded file instead of a normal website, so the camera pop-up may be blocked. Use HTTPS/GitHub Pages for the real permission flow.", "warn");
-        }
-      }
-
-      async function updatePermissionStateNote(prefix) {
-        var state = await getCameraPermissionState();
-        if (state === "unknown") return;
-        updatePermissionStatus(prefix + " camera permission state: " + state + ".", state === "denied" ? "bad" : state === "prompt" ? "warn" : "");
-      }
-
-      async function getCameraPermissionState() {
-        if (!navigator.permissions || !navigator.permissions.query) return "unknown";
-        try {
-          var result = await navigator.permissions.query({ name: "camera" });
-          return result && result.state ? result.state : "unknown";
-        } catch (err) {
-          return "unknown";
-        }
-      }
-
       function getFriendlyError(err) {
         var name = err && err.name ? err.name : "Error";
         var message = err && err.message ? err.message : String(err);
-        var protocol = window.location.protocol || "unknown:";
         var details = "\n\nTechnical details: " + name + ": " + message;
-
-        if (protocol === "content:") {
-          return "This page is being opened as content:// from Android, not as a normal HTTPS website. The button did call the real browser camera request, but Chrome may block camera access for this kind of downloaded-file origin and may not show the permission pop-up. Upload this HTML to GitHub Pages or any HTTPS host, then open that https:// link on your phone." + details;
-        }
         if (!window.isSecureContext) {
-          return "Camera access is blocked because this page is not running from HTTPS or localhost. Upload it to GitHub Pages, or run it on localhost, then open it again." + details;
+          return "Camera access is blocked because this page is not running from HTTPS or localhost. Use the GitHub Pages link." + details;
         }
         if (/NotAllowedError|Permission|denied|permission/i.test(name + " " + message)) {
-          return "The page asked Chrome for camera access, but Chrome denied it. If you previously tapped Block, a web page cannot force the native pop-up to appear again. Change this site's camera setting to Allow, then tap Try again. Also check Android Settings > Apps > Chrome > Permissions > Camera." + details;
+          return "Chrome denied camera access. Change this site's camera setting to Allow and also check Android Settings > Apps > Chrome > Permissions > Camera." + details;
         }
         if (/NotFoundError|DevicesNotFoundError|OverconstrainedError|Constraint|facingMode/i.test(name + " " + message)) {
-          return "I could not find a usable front camera. I tried the front-camera setting first, then a generic camera fallback." + details;
+          return "I could not find a usable front camera. I tried front camera first, then any camera as a fallback." + details;
         }
         if (/NotReadableError|TrackStartError|Could not start video source/i.test(name + " " + message)) {
-          return "The camera exists, but the browser could not start it. Close other apps or tabs using the camera, then try again." + details;
+          return "The browser found the camera but could not start it. Close other apps or tabs using the camera and try again." + details;
         }
         if (/import|module|Failed to fetch|Load failed|cdn|network|ERR_/i.test(message)) {
-          return "The button is working now, but the browser could not load the Three.js or MediaPipe files from the CDN. Check internet access, ad blockers, or restricted browser settings." + details;
+          return "The camera started, but a CDN asset failed to load. Check internet access or browser restrictions." + details;
         }
-        return "Something failed while starting the camera, 3D renderer, or hand tracking model." + details;
+        return "Something failed while starting the camera, 3D renderer, hand GLB asset, or MediaPipe tracker." + details;
       }
 
       function distance(a, b) {
@@ -1122,6 +1266,12 @@
           (a.y - b.y) * (a.y - b.y) +
           (a.z - b.z) * (a.z - b.z)
         );
+      }
+
+      function dist2d(a, b) {
+        var dx = a.x - b.x;
+        var dy = a.y - b.y;
+        return Math.sqrt(dx * dx + dy * dy);
       }
     })();
   </script>
