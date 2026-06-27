@@ -376,7 +376,7 @@
 </head>
 <body>
   <div id="app">
-    <div id="stage" aria-label="Three dimensional animated hand model">
+    <div id="stage" aria-label="Three dimensional animated model">
       <div id="stageFallback">HAND<br>TRACK</div>
     </div>
 
@@ -385,7 +385,7 @@
         <p id="title">HandTrack3D</p>
         <div class="statusLine"><span id="stateDot" class="dot"></span><span id="statusText">Waiting to start.</span></div>
         <div id="metrics">
-          <span id="handedness">Hand: none</span>
+          <span id="handedness">Mode: none</span>
           <span id="confidence">Confidence: 0%</span>
           <span id="fps">FPS: --</span>
           <span id="trackedFrames">Tracked: 0</span>
@@ -396,15 +396,13 @@
         </div>
       </section>
       <a id="githubButton" href="https://github.com/Brandon-Valley/HandTrack3D" target="_blank" rel="noopener noreferrer" aria-label="Open GitHub repository">
-        <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.65 7.65 0 0 1 8 3.86c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
-        </svg>
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.65 7.65 0 0 1 8 3.86c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
       </a>
     </div>
 
     <section id="tips" class="card">
       <strong>How to use</strong>
-      Hold one open hand in the selfie camera. Keep your full hand in the little camera box, good lighting helps, and move slowly for the first second.
+      Use the mode pill to switch between Hand, Face, Upper body, and Full body. Pick Stick or Natural rig style.
     </section>
 
     <div id="viewfinder" class="card" aria-label="Selfie camera viewfinder">
@@ -420,13 +418,13 @@
     <div id="startPanel">
       <div id="startBox">
         <h1>Hand tracking 3D demo</h1>
-        <p>This fixed build starts tracking first. It does not wait on a slow remote 3D asset, so you should not get stuck on the loading screen again.</p>
+        <p>This build adds Hand, Face, Upper body, and Full body modes, plus Stick and Natural rig styles with online GLB assets loaded in the background.</p>
         <button id="startButton" type="button">Start front camera</button>
         <div id="startLog"></div>
         <div id="startError"></div>
       </div>
     </div>
   </div>
-  <script type="module" src="./app.js?v=2026-06-27-no-blocking-asset"></script>
+  <script type="module" src="./app.js?v=2026-06-27-assets-upper-face-fix"></script>
 </body>
 </html>
