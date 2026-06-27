@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '2026-06-27-no-blocking-asset';
+const VERSION = '2026-06-27-minimized-status';
 const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
 const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
 
@@ -61,6 +61,7 @@ const el = {
   startButton: document.getElementById('startButton'),
   startLog: document.getElementById('startLog'),
   startError: document.getElementById('startError'),
+  statusCard: document.getElementById('statusCard'),
   statusText: document.getElementById('statusText'),
   stateDot: document.getElementById('stateDot'),
   handedness: document.getElementById('handedness'),
@@ -75,6 +76,7 @@ const el = {
 };
 let overlayCtx = el.overlay.getContext('2d', { alpha: true });
 
+setupStatusPanel();
 el.startButton.addEventListener('click', startDemo);
 window.addEventListener('resize', resizeAll);
 window.addEventListener('orientationchange', () => setTimeout(resizeAll, 250));
@@ -82,6 +84,92 @@ resizeOverlay();
 showStartupNote((window.isSecureContext ? 'Ready.' : 'HTTPS is required.') + ' Version: ' + VERSION);
 el.tracker.textContent = 'Tracker: waiting';
 el.model.textContent = 'Model: built-in hand rig';
+
+function setupStatusPanel() {
+  if (!el.statusCard) return;
+  const style = document.createElement('style');
+  style.textContent = `
+    #statusCard {
+      transition: width 160ms ease, padding 160ms ease, border-radius 160ms ease, opacity 160ms ease;
+    }
+    #statusToggle {
+      appearance: none;
+      display: block;
+      width: 100%;
+      min-height: 0;
+      margin: 9px 0 0;
+      padding: 7px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 950;
+      line-height: 1;
+      box-shadow: none;
+    }
+    #statusCard.collapsed {
+      width: auto;
+      min-width: 0;
+      max-width: calc(100vw - 88px);
+      padding: 8px 9px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #statusCard.collapsed #title {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+    #statusCard.collapsed .statusLine {
+      gap: 0;
+      font-size: 0;
+      line-height: 1;
+    }
+    #statusCard.collapsed #statusText {
+      display: none;
+    }
+    #statusCard.collapsed #metrics {
+      display: none;
+    }
+    #statusCard.collapsed #statusToggle {
+      width: auto;
+      margin: 0;
+      padding: 6px 8px;
+      font-size: 11px;
+      background: rgba(255, 255, 255, 0.10);
+    }
+    @media (max-width: 560px) {
+      #statusCard.collapsed {
+        width: auto;
+        max-width: calc(100vw - 84px);
+        padding: 8px 9px;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+
+  const button = document.createElement('button');
+  button.id = 'statusToggle';
+  button.type = 'button';
+  button.textContent = 'Stats';
+  button.setAttribute('aria-label', 'Show tracking stats');
+  button.setAttribute('aria-expanded', 'false');
+  const metrics = document.getElementById('metrics');
+  el.statusCard.insertBefore(button, metrics);
+  el.statusCard.classList.add('collapsed');
+
+  button.addEventListener('click', () => {
+    const collapsed = el.statusCard.classList.toggle('collapsed');
+    button.textContent = collapsed ? 'Stats' : 'Hide stats';
+    button.setAttribute('aria-label', collapsed ? 'Show tracking stats' : 'Hide tracking stats');
+    button.setAttribute('aria-expanded', String(!collapsed));
+  });
+}
 
 async function startDemo() {
   el.startButton.disabled = true;
