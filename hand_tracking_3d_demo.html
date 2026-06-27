@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Hand Tracking 3D Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05070d;
+      --panel: rgba(8, 12, 22, 0.80);
+      --panelStrong: rgba(8, 12, 22, 0.94);
+      --text: #f7fbff;
+      --muted: #aeb9ce;
+      --good: #6effb6;
+      --warn: #ffd36e;
+      --bad: #ff7373;
+      --accent: #6ed6ff;
+      --line: rgba(255, 255, 255, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+    }
+
+    body {
+      position: fixed;
+      inset: 0;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(52, 103, 255, 0.24), transparent 36%),
+        radial-gradient(circle at 22% 78%, rgba(89, 255, 183, 0.14), transparent 34%),
+        linear-gradient(180deg, #090d17 0%, #05070d 100%);
+    }
+
+    #stage {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    #stage canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    #stageFallback {
+      width: min(82vw, 520px);
+      color: rgba(247, 251, 255, 0.12);
+      font-size: clamp(54px, 22vw, 160px);
+      line-height: 1;
+      text-align: center;
+      user-select: none;
+      filter: drop-shadow(0 26px 40px rgba(0, 0, 0, 0.35));
+    }
+
+    #hud {
+      position: absolute;
+      top: max(12px, env(safe-area-inset-top));
+      left: 12px;
+      right: 12px;
+      z-index: 5;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card {
+      pointer-events: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(18px);
+    }
+
+    #statusCard {
+      min-width: 190px;
+      max-width: min(360px, calc(100vw - 24px));
+      padding: 12px 14px;
+    }
+
+    #title {
+      margin: 0 0 8px;
+      font-weight: 900;
+      letter-spacing: 0.01em;
+      font-size: 15px;
+    }
+
+    .statusLine {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.28;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      flex: 0 0 auto;
+      border-radius: 99px;
+      background: var(--warn);
+      box-shadow: 0 0 14px currentColor;
+    }
+
+    .dot.good {
+      background: var(--good);
+      color: var(--good);
+    }
+
+    .dot.bad {
+      background: var(--bad);
+      color: var(--bad);
+    }
+
+    #metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    #metrics span {
+      padding: 6px 8px;
+      border-radius: 11px;
+      background: rgba(255, 255, 255, 0.06);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #startPanel {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: radial-gradient(circle at 50% 45%, rgba(110, 214, 255, 0.14), rgba(5, 7, 13, 0.74) 54%, rgba(5, 7, 13, 0.92));
+    }
+
+    #startBox {
+      width: min(560px, 100%);
+      padding: 22px;
+      text-align: center;
+      background: var(--panelStrong);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+    }
+
+    #startBox h1 {
+      margin: 0 0 10px;
+      font-size: clamp(27px, 8vw, 46px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+    }
+
+    #startBox p {
+      margin: 0 auto 16px;
+      max-width: 450px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.42;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #dcf8ff 0%, #65d9ff 100%);
+      color: #03131d;
+      font-weight: 950;
+      font-size: 16px;
+      padding: 14px 20px;
+      min-height: 48px;
+      cursor: pointer;
+      box-shadow: 0 14px 32px rgba(64, 204, 255, 0.25);
+    }
+
+    button:disabled {
+      opacity: 0.64;
+      cursor: wait;
+    }
+
+    #startError {
+      display: none;
+      margin-top: 14px;
+      padding: 11px 12px;
+      border-radius: 14px;
+      text-align: left;
+      color: #ffd6d6;
+      background: rgba(255, 115, 115, 0.10);
+      border: 1px solid rgba(255, 115, 115, 0.28);
+      font-size: 13px;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+
+    #startLog {
+      display: none;
+      margin: 12px auto 0;
+      max-width: 430px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: pre-line;
+      text-align: left;
+    }
+
+    #permissionStatus {
+      margin: 10px auto 0;
+      max-width: 430px;
+      display: none;
+      gap: 8px;
+      align-items: flex-start;
+      text-align: left;
+      padding: 10px 11px;
+      border-radius: 14px;
+      color: #dff7ff;
+      background: rgba(110, 214, 255, 0.08);
+      border: 1px solid rgba(110, 214, 255, 0.22);
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+
+    #permissionStatus.warn {
+      color: #fff0bf;
+      background: rgba(255, 211, 110, 0.10);
+      border-color: rgba(255, 211, 110, 0.30);
+    }
+
+    #permissionStatus.bad {
+      color: #ffd6d6;
+      background: rgba(255, 115, 115, 0.10);
+      border-color: rgba(255, 115, 115, 0.30);
+    }
+
+    #viewfinder {
+      position: absolute;
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 6;
+      width: min(42vw, 220px);
+      aspect-ratio: 4 / 3;
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: 0 20px 56px rgba(0, 0, 0, 0.5);
+      background: #101827;
+    }
+
+    #cameraWrap {
+      position: absolute;
+      inset: 0;
+      transform: scaleX(-1);
+    }
+
+    #video,
+    #overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #overlay {
+      z-index: 2;
+    }
+
+    #viewfinderLabel {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      z-index: 3;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.5);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    #noHandBanner {
+      position: absolute;
+      left: 50%;
+      bottom: max(124px, calc(env(safe-area-inset-bottom) + 124px));
+      z-index: 5;
+      transform: translateX(-50%);
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255, 115, 115, 0.12);
+      border: 1px solid rgba(255, 115, 115, 0.34);
+      color: #ffd6d6;
+      font-weight: 900;
+      font-size: 13px;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 160ms ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    #noHandBanner.show {
+      opacity: 1;
+    }
+
+    #tips {
+      position: absolute;
+      left: max(12px, env(safe-area-inset-left));
+      bottom: max(12px, env(safe-area-inset-bottom));
+      z-index: 4;
+      width: min(46vw, 310px);
+      padding: 10px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    #tips strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    @media (max-width: 520px) {
+      #statusCard {
+        padding: 10px 11px;
+        min-width: 174px;
+      }
+
+      #metrics {
+        grid-template-columns: 1fr;
+      }
+
+      #tips {
+        width: min(50vw, 240px);
+        font-size: 11px;
+      }
+
+      #viewfinder {
+        width: min(44vw, 185px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="stage" aria-label="Three dimensional hand model">
+      <div id="stageFallback">HAND</div>
+    </div>
+
+    <div id="hud">
+      <section id="statusCard" class="card" aria-live="polite">
+        <p id="title">3D Hand Tracking</p>
+        <div class="statusLine"><span id="stateDot" class="dot"></span><span id="statusText">Waiting to start.</span></div>
+        <div id="metrics">
+          <span id="handedness">Hand: none</span>
+          <span id="confidence">Confidence: 0%</span>
+          <span id="fps">FPS: --</span>
+          <span id="modelMode">Model: procedural rig</span>
+        </div>
+      </section>
+    </div>
+
+    <section id="tips" class="card">
+      <strong>How to use</strong>
+      Hold one hand in the selfie camera. Open and close your fingers, twist your wrist, and move closer or farther away.
+    </section>
+
+    <div id="viewfinder" class="card" aria-label="Selfie camera viewfinder">
+      <div id="cameraWrap">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="viewfinderLabel">Camera</div>
+    </div>
+
+    <div id="noHandBanner">No hand detected</div>
+
+    <div id="startPanel">
+      <div id="startBox">
+        <h1>Hand tracking 3D demo</h1>
+        <p>This uses your front camera, detects 21 hand landmarks, and drives a 3D hand rig in real time. It works best from HTTPS, like GitHub Pages, or from localhost.</p>
+        <button id="startButton" type="button">Request camera permission</button>
+        <div id="permissionStatus"></div>
+        <div id="startLog"></div>
+        <div id="startError"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var THREE = null;
+      var FilesetResolver = null;
+      var HandLandmarker = null;
+
+      var HAND_CONNECTIONS = [
+        [0, 1], [1, 2], [2, 3], [3, 4],
+        [0, 5], [5, 6], [6, 7], [7, 8],
+        [0, 9], [9, 10], [10, 11], [11, 12],
+        [0, 13], [13, 14], [14, 15], [15, 16],
+        [0, 17], [17, 18], [18, 19], [19, 20],
+        [5, 9], [9, 13], [13, 17]
+      ];
+
+      var PALM_INDICES = [0, 5, 9, 0, 9, 13, 0, 13, 17, 5, 9, 13, 5, 13, 17];
+      var TIP_INDICES = { 4: true, 8: true, 12: true, 16: true, 20: true };
+      var MCP_INDICES = { 5: true, 9: true, 13: true, 17: true };
+
+      var video = document.getElementById("video");
+      var overlay = document.getElementById("overlay");
+      var stage = document.getElementById("stage");
+      var stageFallback = document.getElementById("stageFallback");
+      var startPanel = document.getElementById("startPanel");
+      var startButton = document.getElementById("startButton");
+      var startError = document.getElementById("startError");
+      var startLog = document.getElementById("startLog");
+      var permissionStatus = document.getElementById("permissionStatus");
+      var statusText = document.getElementById("statusText");
+      var stateDot = document.getElementById("stateDot");
+      var handednessEl = document.getElementById("handedness");
+      var confidenceEl = document.getElementById("confidence");
+      var fpsEl = document.getElementById("fps");
+      var noHandBanner = document.getElementById("noHandBanner");
+
+      var renderer = null;
+      var scene = null;
+      var camera = null;
+      var modelGroup = null;
+      var gridGroup = null;
+      var cylinderGeometry = null;
+      var sphereGeometry = null;
+      var palmGeometry = null;
+      var palmMesh = null;
+      var segments = [];
+      var joints = [];
+      var handLandmarker = null;
+      var overlayCtx = overlay.getContext("2d", { alpha: true });
+
+      var running = false;
+      var librariesLoaded = false;
+      var sceneReady = false;
+      var lastVideoTime = -1;
+      var lastDetectTime = 0;
+      var noHandFrames = 0;
+      var defaultPoints = null;
+      var smoothedPoints = null;
+      var targetPoints = null;
+      var targetGroupPosition = null;
+      var currentGroupPosition = null;
+      var lastFrameTime = performance.now();
+      var fps = 0;
+      var yAxis = null;
+      var tempVec1 = null;
+      var tempVec2 = null;
+
+      startButton.addEventListener("click", startDemo);
+      window.addEventListener("resize", resizeAll);
+      window.addEventListener("orientationchange", function () {
+        setTimeout(resizeAll, 250);
+      });
+      initOverlaySize();
+      showStartupNote(getStartupReadyMessage());
+      updatePermissionStatus("Ready. Tap the button. The very first thing this page will do is call the browser camera permission request.", "");
+      checkInitialPermissionState();
+
+      async function startDemo() {
+        startButton.disabled = true;
+        startButton.textContent = "Requesting camera...";
+        startError.style.display = "none";
+        startError.textContent = "";
+        updatePermissionStatus("Opening the real browser camera permission request now. Choose Allow if Chrome shows the prompt.", "warn");
+        showStartupNote("Requesting camera first, before loading the 3D/tracking code. This gives Android Chrome the cleanest chance to show its native permission pop-up.");
+        setStatus("Requesting front camera...", "warn");
+
+        try {
+          await updatePermissionStateNote("Before request");
+          await initCameraWithFallbacks();
+          await updatePermissionStateNote("After request");
+          startButton.textContent = "Loading demo...";
+          setStatus("Camera on. Loading 3D demo...", "warn");
+          showStartupNote("Camera permission is working. Loading Three.js and MediaPipe now...");
+          await loadLibraries();
+          setupThreeScene();
+          setStatus("Loading hand tracker model...", "warn");
+          showStartupNote("Camera is on. Loading the hand tracker model...");
+          await initLandmarker();
+          running = true;
+          startPanel.style.display = "none";
+          setStatus("Camera on. Show one hand.", "warn");
+        } catch (err) {
+          console.error(err);
+          running = false;
+          stopCamera();
+          startButton.disabled = false;
+          startButton.textContent = "Try permission pop-up again";
+          setStatus("Could not start.", "bad");
+          startError.textContent = getFriendlyError(err);
+          startError.style.display = "block";
+          updatePermissionStatus("Startup stopped. The details below explain whether this is a blocked site permission, an Android app permission problem, or a content:// file problem.", "bad");
+          showStartupNote("Startup stopped. The error details are shown below.");
+        }
+      }
+
+      async function loadLibraries() {
+        if (librariesLoaded) return;
+        if (!supportsDynamicImport()) {
+          throw new Error("This browser does not support JavaScript module imports. Open the file in current Chrome, Safari, or Edge.");
+        }
+        setStatus("Loading 3D and tracking code...", "warn");
+        showStartupNote("Loading Three.js and MediaPipe from CDN...");
+
+        var threeUrl = "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js";
+        var mediapipeUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
+        var loaded = await Promise.all([
+          import(threeUrl),
+          import(mediapipeUrl)
+        ]);
+        THREE = loaded[0];
+        FilesetResolver = loaded[1].FilesetResolver;
+        HandLandmarker = loaded[1].HandLandmarker;
+        librariesLoaded = true;
+      }
+
+      function supportsDynamicImport() {
+        try {
+          new Function("return import('data:text/javascript,export default 1')");
+          return true;
+        } catch (err) {
+          return false;
+        }
+      }
+
+      function setupThreeScene() {
+        if (sceneReady) return;
+
+        yAxis = new THREE.Vector3(0, 1, 0);
+        tempVec1 = new THREE.Vector3();
+        tempVec2 = new THREE.Vector3();
+        targetGroupPosition = new THREE.Vector3(0, -0.1, 0);
+        currentGroupPosition = new THREE.Vector3(0, -0.1, 0);
+
+        defaultPoints = [
+          [0.00, -1.18, 0.00],
+          [-0.56, -0.78, 0.05], [-0.88, -0.36, 0.08], [-1.08, 0.04, 0.07], [-1.26, 0.42, 0.03],
+          [-0.48, -0.24, 0.02], [-0.58, 0.38, 0.06], [-0.64, 0.92, 0.04], [-0.68, 1.38, 0.00],
+          [-0.12, -0.12, 0.02], [-0.14, 0.58, 0.08], [-0.16, 1.22, 0.06], [-0.18, 1.78, 0.02],
+          [0.26, -0.20, 0.02], [0.34, 0.42, 0.07], [0.40, 0.98, 0.05], [0.44, 1.46, 0.02],
+          [0.60, -0.36, 0.00], [0.78, 0.16, 0.05], [0.90, 0.62, 0.03], [1.00, 1.02, 0.00]
+        ].map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); });
+
+        smoothedPoints = defaultPoints.map(function (p) { return p.clone(); });
+        targetPoints = defaultPoints.map(function (p) { return p.clone(); });
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        stageFallback.style.display = "none";
+        stage.appendChild(renderer.domElement);
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 0.15, 8.2);
+
+        scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x10172a, 2.8));
+
+        var key = new THREE.DirectionalLight(0xffffff, 2.3);
+        key.position.set(2.8, 4.2, 4.6);
+        scene.add(key);
+
+        var rim = new THREE.DirectionalLight(0x7ddfff, 1.2);
+        rim.position.set(-4.0, 1.4, -2.2);
+        scene.add(rim);
+
+        modelGroup = new THREE.Group();
+        modelGroup.position.copy(currentGroupPosition);
+        scene.add(modelGroup);
+
+        gridGroup = new THREE.Group();
+        scene.add(gridGroup);
+        makeBackgroundGrid(gridGroup);
+
+        var skinMat = new THREE.MeshStandardMaterial({ color: 0xe7a27b, roughness: 0.56, metalness: 0.02 });
+        var palmMat = new THREE.MeshStandardMaterial({ color: 0xf0b18c, roughness: 0.62, metalness: 0, transparent: true, opacity: 0.62, side: THREE.DoubleSide });
+        var jointMat = new THREE.MeshStandardMaterial({ color: 0xffd4bd, roughness: 0.5, metalness: 0.01 });
+        var tipMat = new THREE.MeshStandardMaterial({ color: 0x90f4ff, emissive: 0x0b89a0, emissiveIntensity: 0.55, roughness: 0.38, metalness: 0.02 });
+        var mcpMat = new THREE.MeshStandardMaterial({ color: 0xffc197, emissive: 0x5a2106, emissiveIntensity: 0.12, roughness: 0.5, metalness: 0.01 });
+
+        cylinderGeometry = new THREE.CylinderGeometry(1, 1, 1, 18, 1, false);
+        sphereGeometry = new THREE.SphereGeometry(1, 18, 12);
+
+        segments = HAND_CONNECTIONS.map(function (pair) {
+          var mesh = new THREE.Mesh(cylinderGeometry, skinMat);
+          mesh.userData.a = pair[0];
+          mesh.userData.b = pair[1];
+          modelGroup.add(mesh);
+          return mesh;
+        });
+
+        joints = defaultPoints.map(function (_, index) {
+          var mat = TIP_INDICES[index] ? tipMat : MCP_INDICES[index] ? mcpMat : jointMat;
+          var mesh = new THREE.Mesh(sphereGeometry, mat);
+          modelGroup.add(mesh);
+          return mesh;
+        });
+
+        palmGeometry = new THREE.BufferGeometry();
+        palmGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(PALM_INDICES.length * 3), 3));
+        palmMesh = new THREE.Mesh(palmGeometry, palmMat);
+        modelGroup.add(palmMesh);
+
+        applyPoints(defaultPoints, true);
+        sceneReady = true;
+        animate();
+      }
+
+      async function initCameraWithFallbacks() {
+        if (!window.isSecureContext) {
+          throw new Error("Camera access needs a secure context. Use HTTPS, GitHub Pages, or localhost. Opening this as a downloaded file usually will not work on mobile.");
+        }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("This browser does not expose navigator.mediaDevices.getUserMedia. Use current Chrome, Safari, or Edge.");
+        }
+
+        var attempts = [
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: "user" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30, max: 60 }
+            }
+          },
+          {
+            audio: false,
+            video: {
+              facingMode: "user",
+              width: { ideal: 960 },
+              height: { ideal: 540 }
+            }
+          },
+          {
+            audio: false,
+            video: true
+          }
+        ];
+
+        var lastErr = null;
+        for (var i = 0; i < attempts.length; i++) {
+          try {
+            var stream = await navigator.mediaDevices.getUserMedia(attempts[i]);
+            video.srcObject = stream;
+            video.setAttribute("playsinline", "");
+            video.muted = true;
+            await waitForVideoReady(video, 8000);
+            await safeVideoPlay(video);
+            initOverlaySize();
+            return;
+          } catch (err) {
+            lastErr = err;
+            stopCamera();
+            showStartupNote("Camera attempt " + (i + 1) + " failed. Trying fallback...");
+          }
+        }
+        throw lastErr || new Error("No usable camera stream was found.");
+      }
+
+      function waitForVideoReady(el, timeoutMs) {
+        return new Promise(function (resolve, reject) {
+          if (el.videoWidth > 0 && el.videoHeight > 0 && el.readyState >= 2) {
+            resolve();
+            return;
+          }
+
+          var done = false;
+          var timer = setTimeout(function () {
+            if (done) return;
+            done = true;
+            cleanup();
+            reject(new Error("Camera opened, but the video stream did not become ready."));
+          }, timeoutMs);
+
+          function cleanup() {
+            clearTimeout(timer);
+            el.removeEventListener("loadedmetadata", onReady);
+            el.removeEventListener("canplay", onReady);
+            el.removeEventListener("playing", onReady);
+            el.removeEventListener("error", onError);
+          }
+
+          function onReady() {
+            if (done) return;
+            if (el.videoWidth > 0 && el.videoHeight > 0) {
+              done = true;
+              cleanup();
+              resolve();
+            }
+          }
+
+          function onError() {
+            if (done) return;
+            done = true;
+            cleanup();
+            reject(new Error("The video element reported an error while starting."));
+          }
+
+          el.addEventListener("loadedmetadata", onReady);
+          el.addEventListener("canplay", onReady);
+          el.addEventListener("playing", onReady);
+          el.addEventListener("error", onError);
+          el.play().catch(function () {});
+        });
+      }
+
+      async function safeVideoPlay(el) {
+        try {
+          await el.play();
+        } catch (err) {
+          if (!/AbortError/i.test(String(err && err.name ? err.name : err))) {
+            throw err;
+          }
+        }
+      }
+
+      function stopCamera() {
+        if (video && video.srcObject && video.srcObject.getTracks) {
+          video.srcObject.getTracks().forEach(function (track) { track.stop(); });
+        }
+        if (video) video.srcObject = null;
+      }
+
+      async function initLandmarker() {
+        var vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm");
+        var baseOptions = {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+        };
+
+        try {
+          handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: Object.assign({}, baseOptions, { delegate: "GPU" }),
+            runningMode: "VIDEO",
+            numHands: 1,
+            minHandDetectionConfidence: 0.52,
+            minHandPresenceConfidence: 0.52,
+            minTrackingConfidence: 0.48
+          });
+        } catch (gpuErr) {
+          console.warn("GPU delegate failed, falling back to CPU.", gpuErr);
+          handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: Object.assign({}, baseOptions, { delegate: "CPU" }),
+            runningMode: "VIDEO",
+            numHands: 1,
+            minHandDetectionConfidence: 0.52,
+            minHandPresenceConfidence: 0.52,
+            minTrackingConfidence: 0.48
+          });
+        }
+      }
+
+      function animate() {
+        if (!sceneReady) return;
+        requestAnimationFrame(animate);
+
+        var now = performance.now();
+        var dt = Math.max(1, now - lastFrameTime);
+        fps = fps * 0.90 + (1000 / dt) * 0.10;
+        lastFrameTime = now;
+
+        if (running && handLandmarker && video.readyState >= 2) {
+          if (video.currentTime !== lastVideoTime && now - lastDetectTime > 8) {
+            lastVideoTime = video.currentTime;
+            lastDetectTime = now;
+            var result = handLandmarker.detectForVideo(video, now);
+            handleResult(result);
+          }
+        }
+
+        var follow = noHandFrames > 10 ? 0.055 : 0.42;
+        for (var i = 0; i < smoothedPoints.length; i++) {
+          smoothedPoints[i].lerp(targetPoints[i], follow);
+        }
+        currentGroupPosition.lerp(targetGroupPosition, 0.26);
+        modelGroup.position.copy(currentGroupPosition);
+        applyPoints(smoothedPoints, false);
+
+        gridGroup.rotation.z = now * 0.000035;
+        renderer.render(scene, camera);
+        fpsEl.textContent = "FPS: " + Math.round(fps);
+      }
+
+      function handleResult(result) {
+        initOverlaySize();
+        overlayCtx.clearRect(0, 0, overlay.width, overlay.height);
+
+        if (!result || !result.landmarks || result.landmarks.length === 0) {
+          noHandFrames++;
+          if (noHandFrames > 8) {
+            targetPoints = defaultPoints.map(function (p) { return p.clone(); });
+            targetGroupPosition.set(0, -0.1, 0);
+            setStatus("No hand detected.", "bad");
+            noHandBanner.classList.add("show");
+            handednessEl.textContent = "Hand: none";
+            confidenceEl.textContent = "Confidence: 0%";
+          }
+          return;
+        }
+
+        noHandFrames = 0;
+        noHandBanner.classList.remove("show");
+
+        var landmarks = result.landmarks[0];
+        var worldLandmarks = result.worldLandmarks && result.worldLandmarks[0] ? result.worldLandmarks[0] : null;
+        var handedness = result.handednesses && result.handednesses[0] && result.handednesses[0][0];
+        var handLabel = handedness ? handedness.categoryName : "tracked";
+        var handScore = handedness ? handedness.score : 0;
+        handednessEl.textContent = "Hand: " + handLabel;
+        confidenceEl.textContent = "Confidence: " + Math.round(handScore * 100) + "%";
+        setStatus("Hand detected. Animating model.", "good");
+
+        drawLandmarks(overlayCtx, landmarks);
+        targetPoints = convertLandmarksToThreePoints(landmarks, worldLandmarks);
+        updateTargetGroupPosition(landmarks);
+      }
+
+      function convertLandmarksToThreePoints(imageLandmarks, worldLandmarks) {
+        var pts;
+        if (worldLandmarks && worldLandmarks.length === 21) {
+          pts = worldLandmarks.map(function (lm) {
+            return new THREE.Vector3(-lm.x * 16, -lm.y * 16, -lm.z * 16);
+          });
+        } else {
+          var vw = video.videoWidth || 1280;
+          var vh = video.videoHeight || 720;
+          var aspect = vw / Math.max(1, vh);
+          var viewWidth = 5.25 * Math.min(aspect, 1.9);
+          var viewHeight = 5.6;
+          var zScale = 8.5;
+          pts = imageLandmarks.map(function (lm) {
+            return new THREE.Vector3((0.5 - lm.x) * viewWidth, (0.5 - lm.y) * viewHeight, -lm.z * zScale);
+          });
+        }
+
+        var center = new THREE.Vector3();
+        [0, 5, 9, 13, 17].forEach(function (index) { center.add(pts[index]); });
+        center.multiplyScalar(1 / 5);
+
+        var palmSize = distance(pts[0], pts[9]);
+        var scale = THREE.MathUtils.clamp(1.18 / Math.max(palmSize, 0.08), 0.72, 2.25);
+        return pts.map(function (p) { return p.sub(center).multiplyScalar(scale); });
+      }
+
+      function updateTargetGroupPosition(landmarks) {
+        if (!landmarks || !landmarks.length) return;
+        var centerX = 0;
+        var centerY = 0;
+        var minX = 1;
+        var maxX = 0;
+        for (var i = 0; i < landmarks.length; i++) {
+          centerX += landmarks[i].x;
+          centerY += landmarks[i].y;
+          minX = Math.min(minX, landmarks[i].x);
+          maxX = Math.max(maxX, landmarks[i].x);
+        }
+        centerX /= landmarks.length;
+        centerY /= landmarks.length;
+        var handWidth = Math.max(0.04, maxX - minX);
+        var z = THREE.MathUtils.clamp((0.28 - handWidth) * 7.0, -1.1, 1.4);
+        targetGroupPosition.set((0.5 - centerX) * 3.8, (0.5 - centerY) * 2.5 - 0.1, z);
+      }
+
+      function applyPoints(points, snap) {
+        if (!sceneReady) return;
+        var working = snap ? points.map(function (p) { return p.clone(); }) : points;
+
+        for (var s = 0; s < segments.length; s++) {
+          var mesh = segments[s];
+          var start = working[mesh.userData.a];
+          var end = working[mesh.userData.b];
+          placeCylinder(mesh, start, end, radiusForSegment(mesh.userData.a, mesh.userData.b));
+        }
+
+        for (var i = 0; i < joints.length; i++) {
+          var radius = TIP_INDICES[i] ? 0.072 : MCP_INDICES[i] ? 0.078 : i === 0 ? 0.09 : 0.061;
+          joints[i].position.copy(working[i]);
+          joints[i].scale.setScalar(radius);
+        }
+
+        var pos = palmGeometry.attributes.position.array;
+        for (var p = 0; p < PALM_INDICES.length; p++) {
+          var point = working[PALM_INDICES[p]];
+          pos[p * 3 + 0] = point.x;
+          pos[p * 3 + 1] = point.y;
+          pos[p * 3 + 2] = point.z - 0.015;
+        }
+        palmGeometry.attributes.position.needsUpdate = true;
+        palmGeometry.computeVertexNormals();
+      }
+
+      function placeCylinder(mesh, start, end, radius) {
+        var dir = tempVec1.subVectors(end, start);
+        var len = Math.max(dir.length(), 0.0001);
+        var mid = tempVec2.copy(start).add(end).multiplyScalar(0.5);
+        mesh.position.copy(mid);
+        mesh.quaternion.setFromUnitVectors(yAxis, dir.normalize());
+        mesh.scale.set(radius, len, radius);
+      }
+
+      function radiusForSegment(a, b) {
+        if (a === 0 || b === 0) return 0.062;
+        if (MCP_INDICES[a] || MCP_INDICES[b]) return 0.055;
+        if (TIP_INDICES[a] || TIP_INDICES[b]) return 0.039;
+        return 0.047;
+      }
+
+      function drawLandmarks(ctx, landmarks) {
+        var w = overlay.width;
+        var h = overlay.height;
+        ctx.save();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+
+        for (var i = 0; i < HAND_CONNECTIONS.length; i++) {
+          var pair = HAND_CONNECTIONS[i];
+          var p1 = landmarks[pair[0]];
+          var p2 = landmarks[pair[1]];
+          ctx.beginPath();
+          ctx.moveTo(p1.x * w, p1.y * h);
+          ctx.lineTo(p2.x * w, p2.y * h);
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(110, 214, 255, 0.88)";
+          ctx.stroke();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+          ctx.stroke();
+        }
+
+        for (var j = 0; j < landmarks.length; j++) {
+          var p = landmarks[j];
+          var tip = !!TIP_INDICES[j];
+          ctx.beginPath();
+          ctx.arc(p.x * w, p.y * h, tip ? 6 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = tip ? "#90f4ff" : "#ffffff";
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function makeBackgroundGrid(group) {
+        var lineMat = new THREE.LineBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.09 });
+        var ringMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.055 });
+
+        for (var r = 1.2; r <= 6.0; r += 0.8) {
+          var pts = [];
+          for (var i = 0; i <= 128; i++) {
+            var a = (i / 128) * Math.PI * 2;
+            pts.push(new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, -3.2));
+          }
+          var geom = new THREE.BufferGeometry().setFromPoints(pts);
+          group.add(new THREE.Line(geom, ringMat));
+        }
+
+        for (var j = 0; j < 18; j++) {
+          var angle = (j / 18) * Math.PI * 2;
+          var rayPts = [
+            new THREE.Vector3(Math.cos(angle) * 0.55, Math.sin(angle) * 0.55, -3.2),
+            new THREE.Vector3(Math.cos(angle) * 6.5, Math.sin(angle) * 6.5, -3.2)
+          ];
+          var rayGeom = new THREE.BufferGeometry().setFromPoints(rayPts);
+          group.add(new THREE.Line(rayGeom, lineMat));
+        }
+      }
+
+      function initOverlaySize() {
+        var rect = overlay.getBoundingClientRect();
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var width = Math.max(1, Math.round(rect.width * dpr));
+        var height = Math.max(1, Math.round(rect.height * dpr));
+        if (overlay.width !== width || overlay.height !== height) {
+          overlay.width = width;
+          overlay.height = height;
+          overlayCtx = overlay.getContext("2d", { alpha: true });
+        }
+      }
+
+      function resizeAll() {
+        initOverlaySize();
+        if (!renderer || !camera) return;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      }
+
+      function setStatus(text, mode) {
+        statusText.textContent = text;
+        stateDot.classList.toggle("good", mode === "good");
+        stateDot.classList.toggle("bad", mode === "bad");
+      }
+
+      function showStartupNote(text) {
+        startLog.textContent = text;
+        startLog.style.display = "block";
+      }
+
+      function updatePermissionStatus(text, mode) {
+        permissionStatus.textContent = text;
+        permissionStatus.classList.toggle("warn", mode === "warn");
+        permissionStatus.classList.toggle("bad", mode === "bad");
+        permissionStatus.style.display = "block";
+      }
+
+      function getStartupReadyMessage() {
+        var protocol = window.location.protocol || "unknown:";
+        if (protocol === "content:") {
+          return "This is opened as an Android content:// file. I will still ask for camera permission, but Chrome often will not show or remember the normal site permission prompt for downloaded content files. HTTPS, like GitHub Pages, is the reliable way.";
+        }
+        if (!window.isSecureContext) {
+          return "This page is not in a secure browser context. Camera permission usually needs HTTPS or localhost. I will still show the real error if the browser blocks it.";
+        }
+        return "Ready. Tap the button and allow camera permission.";
+      }
+
+      async function checkInitialPermissionState() {
+        var state = await getCameraPermissionState();
+        if (state === "granted") {
+          updatePermissionStatus("Camera permission state: granted. Tap the button to start.", "");
+        } else if (state === "prompt") {
+          updatePermissionStatus("Camera permission state: prompt. Tap the button and Chrome should show the native Allow / Block pop-up.", "");
+        } else if (state === "denied") {
+          updatePermissionStatus("Camera permission state: denied. Chrome may not show the pop-up again until this site is changed from Block to Allow in browser settings.", "bad");
+        } else if ((window.location.protocol || "") === "content:") {
+          updatePermissionStatus("Opened from content://. Android may treat this as a downloaded file instead of a normal website, so the camera pop-up may be blocked. Use HTTPS/GitHub Pages for the real permission flow.", "warn");
+        }
+      }
+
+      async function updatePermissionStateNote(prefix) {
+        var state = await getCameraPermissionState();
+        if (state === "unknown") return;
+        updatePermissionStatus(prefix + " camera permission state: " + state + ".", state === "denied" ? "bad" : state === "prompt" ? "warn" : "");
+      }
+
+      async function getCameraPermissionState() {
+        if (!navigator.permissions || !navigator.permissions.query) return "unknown";
+        try {
+          var result = await navigator.permissions.query({ name: "camera" });
+          return result && result.state ? result.state : "unknown";
+        } catch (err) {
+          return "unknown";
+        }
+      }
+
+      function getFriendlyError(err) {
+        var name = err && err.name ? err.name : "Error";
+        var message = err && err.message ? err.message : String(err);
+        var protocol = window.location.protocol || "unknown:";
+        var details = "\n\nTechnical details: " + name + ": " + message;
+
+        if (protocol === "content:") {
+          return "This page is being opened as content:// from Android, not as a normal HTTPS website. The button did call the real browser camera request, but Chrome may block camera access for this kind of downloaded-file origin and may not show the permission pop-up. Upload this HTML to GitHub Pages or any HTTPS host, then open that https:// link on your phone." + details;
+        }
+        if (!window.isSecureContext) {
+          return "Camera access is blocked because this page is not running from HTTPS or localhost. Upload it to GitHub Pages, or run it on localhost, then open it again." + details;
+        }
+        if (/NotAllowedError|Permission|denied|permission/i.test(name + " " + message)) {
+          return "The page asked Chrome for camera access, but Chrome denied it. If you previously tapped Block, a web page cannot force the native pop-up to appear again. Change this site's camera setting to Allow, then tap Try again. Also check Android Settings > Apps > Chrome > Permissions > Camera." + details;
+        }
+        if (/NotFoundError|DevicesNotFoundError|OverconstrainedError|Constraint|facingMode/i.test(name + " " + message)) {
+          return "I could not find a usable front camera. I tried the front-camera setting first, then a generic camera fallback." + details;
+        }
+        if (/NotReadableError|TrackStartError|Could not start video source/i.test(name + " " + message)) {
+          return "The camera exists, but the browser could not start it. Close other apps or tabs using the camera, then try again." + details;
+        }
+        if (/import|module|Failed to fetch|Load failed|cdn|network|ERR_/i.test(message)) {
+          return "The button is working now, but the browser could not load the Three.js or MediaPipe files from the CDN. Check internet access, ad blockers, or restricted browser settings." + details;
+        }
+        return "Something failed while starting the camera, 3D renderer, or hand tracking model." + details;
+      }
+
+      function distance(a, b) {
+        return Math.sqrt(
+          (a.x - b.x) * (a.x - b.x) +
+          (a.y - b.y) * (a.y - b.y) +
+          (a.z - b.z) * (a.z - b.z)
+        );
+      }
+    })();
+  </script>
+</body>
+</html>
