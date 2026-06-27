@@ -1,664 +1,219 @@
 'use strict';
 
-const VERSION = '2026-06-27-minimized-status';
-const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
-const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const VERSION = '2026-06-27-modes-simple';
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task';
+const POSE_MODEL = 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task';
+const WASM = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm';
 
-const CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],
-  [0, 5], [5, 6], [6, 7], [7, 8],
-  [0, 9], [9, 10], [10, 11], [11, 12],
-  [0, 13], [13, 14], [14, 15], [15, 16],
-  [0, 17], [17, 18], [18, 19], [19, 20],
-  [5, 9], [9, 13], [13, 17], [5, 17]
-];
-const PALM_TRIANGLES = [0, 5, 9, 0, 9, 13, 0, 13, 17, 5, 9, 13, 5, 13, 17];
-const TIP = new Set([4, 8, 12, 16, 20]);
-const MCP = new Set([5, 9, 13, 17]);
+const HAND_CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[0,9],[9,10],[10,11],[11,12],[0,13],[13,14],[14,15],[15,16],[0,17],[17,18],[18,19],[19,20],[5,9],[9,13],[13,17],[5,17]];
+const POSE_CONN = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[27,31],[28,32],[0,11],[0,12]];
+const FACE_IDS = [10,152,234,454,1,4,33,133,263,362,61,291,13,14,0,17,50,280];
+const FACE_CONN = [[0,2],[0,3],[2,1],[3,1],[6,7],[8,9],[10,12],[12,11],[11,13],[13,10],[4,5],[14,15]];
+const TIP = new Set([4,8,12,16,20]);
 
-let THREE = null;
-let FilesetResolver = null;
-let HandLandmarker = null;
-let handLandmarker = null;
-let renderer = null;
-let scene = null;
-let camera3d = null;
-let handGroup = null;
-let gridGroup = null;
-let palmGeometry = null;
-let palmMesh = null;
-let segmentMeshes = [];
-let jointMeshes = [];
-let nailMeshes = [];
-let defaultPoints = [];
-let targetPoints = [];
-let smoothPoints = [];
-let targetPosition = null;
-let smoothPosition = null;
-let targetRotation = null;
-let smoothRotation = null;
-let yAxis = null;
-let tempA = null;
-let tempB = null;
-let tempC = null;
-let tempD = null;
-let running = false;
-let sceneReady = false;
-let analyzedFrames = 0;
-let trackedFrames = 0;
-let noHandFrames = 0;
-let lastDetectMs = 0;
-let lastFrameMs = performance.now();
-let fpsValue = 0;
-let triedRelaxedTracker = false;
+let THREE, FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker, vision;
+let renderer, scene, camera3d, root, grid, tracker, trackerMode = '';
+let mode = 'hand', style = 'natural', running = false, loadingTracker = false;
+let points = [], target = [], smooth = [], connections = [], lastDetect = 0, lastFrame = performance.now(), fps = 0;
+let analyzed = 0, tracked = 0, misses = 0, triedRelaxed = false;
+let yAxis, tmp1, tmp2;
+let meshes = { lines: [], joints: [], extras: [] };
 
 const el = {
-  stage: document.getElementById('stage'),
-  fallback: document.getElementById('stageFallback'),
-  video: document.getElementById('video'),
-  overlay: document.getElementById('overlay'),
-  startPanel: document.getElementById('startPanel'),
-  startButton: document.getElementById('startButton'),
-  startLog: document.getElementById('startLog'),
-  startError: document.getElementById('startError'),
-  statusCard: document.getElementById('statusCard'),
-  statusText: document.getElementById('statusText'),
-  stateDot: document.getElementById('stateDot'),
-  handedness: document.getElementById('handedness'),
-  confidence: document.getElementById('confidence'),
-  fps: document.getElementById('fps'),
-  tracked: document.getElementById('trackedFrames'),
-  analyzed: document.getElementById('analyzedFrames'),
-  tracker: document.getElementById('trackerMode'),
-  videoSize: document.getElementById('videoSize'),
-  model: document.getElementById('modelMode'),
-  noHand: document.getElementById('noHandBanner')
+  app: document.getElementById('app'), stage: document.getElementById('stage'), fallback: document.getElementById('stageFallback'),
+  video: document.getElementById('video'), overlay: document.getElementById('overlay'), startPanel: document.getElementById('startPanel'),
+  startButton: document.getElementById('startButton'), startLog: document.getElementById('startLog'), startError: document.getElementById('startError'),
+  statusCard: document.getElementById('statusCard'), statusText: document.getElementById('statusText'), stateDot: document.getElementById('stateDot'),
+  handedness: document.getElementById('handedness'), confidence: document.getElementById('confidence'), fps: document.getElementById('fps'),
+  tracked: document.getElementById('trackedFrames'), analyzed: document.getElementById('analyzedFrames'), tracker: document.getElementById('trackerMode'),
+  videoSize: document.getElementById('videoSize'), model: document.getElementById('modelMode'), noHand: document.getElementById('noHandBanner')
 };
-let overlayCtx = el.overlay.getContext('2d', { alpha: true });
+let ctx = el.overlay.getContext('2d', { alpha: true });
 
 setupStatusPanel();
+setupModePanel();
+resizeOverlay();
+showLog('Ready. Version: ' + VERSION);
+updateLabels();
 el.startButton.addEventListener('click', startDemo);
 window.addEventListener('resize', resizeAll);
 window.addEventListener('orientationchange', () => setTimeout(resizeAll, 250));
-resizeOverlay();
-showStartupNote((window.isSecureContext ? 'Ready.' : 'HTTPS is required.') + ' Version: ' + VERSION);
-el.tracker.textContent = 'Tracker: waiting';
-el.model.textContent = 'Model: built-in hand rig';
 
 function setupStatusPanel() {
-  if (!el.statusCard) return;
-  const style = document.createElement('style');
-  style.textContent = `
-    #statusCard {
-      transition: width 160ms ease, padding 160ms ease, border-radius 160ms ease, opacity 160ms ease;
-    }
-    #statusToggle {
-      appearance: none;
-      display: block;
-      width: 100%;
-      min-height: 0;
-      margin: 9px 0 0;
-      padding: 7px 9px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.08);
-      color: var(--text);
-      font-size: 11px;
-      font-weight: 950;
-      line-height: 1;
-      box-shadow: none;
-    }
-    #statusCard.collapsed {
-      width: auto;
-      min-width: 0;
-      max-width: calc(100vw - 88px);
-      padding: 8px 9px;
-      border-radius: 999px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    #statusCard.collapsed #title {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1;
-      letter-spacing: -0.02em;
-      white-space: nowrap;
-    }
-    #statusCard.collapsed .statusLine {
-      gap: 0;
-      font-size: 0;
-      line-height: 1;
-    }
-    #statusCard.collapsed #statusText {
-      display: none;
-    }
-    #statusCard.collapsed #metrics {
-      display: none;
-    }
-    #statusCard.collapsed #statusToggle {
-      width: auto;
-      margin: 0;
-      padding: 6px 8px;
-      font-size: 11px;
-      background: rgba(255, 255, 255, 0.10);
-    }
-    @media (max-width: 560px) {
-      #statusCard.collapsed {
-        width: auto;
-        max-width: calc(100vw - 84px);
-        padding: 8px 9px;
-      }
-    }
+  const css = document.createElement('style');
+  css.textContent = `
+    #statusCard{transition:all .16s ease}#statusToggle{appearance:none;width:100%;min-height:0;margin:9px 0 0;padding:7px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:var(--text);font-size:11px;font-weight:950;box-shadow:none}
+    #statusCard.collapsed{width:auto;min-width:0;max-width:calc(100vw - 88px);padding:8px 9px;border-radius:999px;display:flex;align-items:center;gap:8px}#statusCard.collapsed #title{margin:0;font-size:13px;line-height:1;white-space:nowrap}#statusCard.collapsed .statusLine{font-size:0;gap:0}#statusCard.collapsed #statusText,#statusCard.collapsed #metrics{display:none}#statusCard.collapsed #statusToggle{width:auto;margin:0;padding:6px 8px;font-size:11px;background:rgba(255,255,255,.1)}
+    #modePanel{position:absolute;z-index:7;top:max(12px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(360px,calc(100vw - 108px));pointer-events:auto}#modeToggle{width:100%;min-height:42px;padding:10px 13px;border:1px solid rgba(255,255,255,.22);border-radius:999px;background:rgba(8,12,22,.9);color:#fff;box-shadow:0 18px 54px rgba(0,0,0,.36);backdrop-filter:blur(18px);font-size:13px}#modeSheet{display:none;margin-top:8px;padding:10px;border:1px solid rgba(255,255,255,.18);border-radius:18px;background:rgba(8,12,22,.94);box-shadow:0 18px 54px rgba(0,0,0,.42);backdrop-filter:blur(18px)}#modePanel.open #modeSheet{display:block}.controlLabel{margin:0 0 7px;color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.buttonRow{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px}.buttonRow.two{grid-template-columns:repeat(2,1fr);margin-bottom:0}.modeChoice{min-height:38px;padding:9px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:var(--text);box-shadow:none;font-size:12px}.modeChoice.active{background:linear-gradient(180deg,#e4fbff,#65d9ff);color:#03131d;border-color:transparent}
+    @media(max-width:560px){#statusCard.collapsed{max-width:calc(100vw - 84px)}#modePanel{top:calc(max(12px,env(safe-area-inset-top)) + 52px);left:max(12px,env(safe-area-inset-left));right:auto;transform:none;width:min(250px,calc(100vw - 96px))}#modeToggle{min-height:38px;font-size:12px;padding:9px 11px}}
   `;
-  document.head.appendChild(style);
-
+  document.head.appendChild(css);
   const button = document.createElement('button');
   button.id = 'statusToggle';
   button.type = 'button';
   button.textContent = 'Stats';
-  button.setAttribute('aria-label', 'Show tracking stats');
-  button.setAttribute('aria-expanded', 'false');
-  const metrics = document.getElementById('metrics');
-  el.statusCard.insertBefore(button, metrics);
+  el.statusCard.insertBefore(button, document.getElementById('metrics'));
   el.statusCard.classList.add('collapsed');
-
   button.addEventListener('click', () => {
-    const collapsed = el.statusCard.classList.toggle('collapsed');
-    button.textContent = collapsed ? 'Stats' : 'Hide stats';
-    button.setAttribute('aria-label', collapsed ? 'Show tracking stats' : 'Hide tracking stats');
-    button.setAttribute('aria-expanded', String(!collapsed));
+    const closed = el.statusCard.classList.toggle('collapsed');
+    button.textContent = closed ? 'Stats' : 'Hide stats';
   });
 }
 
-async function startDemo() {
-  el.startButton.disabled = true;
-  el.startButton.textContent = 'Starting camera...';
-  el.startError.textContent = '';
-  el.startError.style.display = 'none';
-  setStatus('Requesting front camera...', 'warn');
-  showStartupNote('Requesting camera first. This build no longer blocks startup on a remote hand asset.');
+function setupModePanel() {
+  const panel = document.createElement('div');
+  panel.id = 'modePanel';
+  panel.innerHTML = `
+    <button id='modeToggle' type='button'>Hand · Natural</button>
+    <div id='modeSheet' class='card'>
+      <p class='controlLabel'>Tracking mode</p>
+      <div class='buttonRow'><button class='modeChoice' data-mode='hand'>Hand</button><button class='modeChoice' data-mode='face'>Face</button><button class='modeChoice' data-mode='body'>Body</button></div>
+      <p class='controlLabel'>Model style</p>
+      <div class='buttonRow two'><button class='modeChoice' data-style='stick'>Stick</button><button class='modeChoice' data-style='natural'>Natural</button></div>
+    </div>`;
+  el.app.appendChild(panel);
+  panel.querySelector('#modeToggle').onclick = () => panel.classList.toggle('open');
+  panel.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => switchMode(b.dataset.mode));
+  panel.querySelectorAll('[data-style]').forEach(b => b.onclick = () => switchStyle(b.dataset.style));
+  refreshButtons();
+}
 
+function refreshButtons() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.querySelectorAll('[data-style]').forEach(b => b.classList.toggle('active', b.dataset.style === style));
+  const t = document.getElementById('modeToggle');
+  if (t) t.textContent = label(mode) + ' · ' + label(style);
+}
+function label(x) { return x === 'hand' ? 'Hand' : x === 'face' ? 'Face' : x === 'body' ? 'Body' : x === 'stick' ? 'Stick' : 'Natural'; }
+function updateLabels() { el.model.textContent = 'Model: ' + label(mode) + ' ' + label(style); el.tracker.textContent = 'Tracker: ' + (trackerMode || 'waiting'); }
+
+async function switchMode(next) {
+  mode = next;
+  misses = 0; analyzed = 0; tracked = 0; triedRelaxed = false;
+  rebuildModel(); refreshButtons(); updateLabels(); clearOverlay();
+  if (running) await initTracker(false);
+}
+function switchStyle(next) { style = next; rebuildModel(); refreshButtons(); updateLabels(); }
+
+async function startDemo() {
+  el.startButton.disabled = true; el.startButton.textContent = 'Starting camera...'; el.startError.style.display = 'none';
+  setStatus('Requesting camera...', 'warn');
   try {
     await startCamera();
-    el.videoSize.textContent = 'Video: ' + (el.video.videoWidth || '?') + 'x' + (el.video.videoHeight || '?');
-    el.startButton.textContent = 'Loading libraries...';
-    setStatus('Camera on. Loading libraries...', 'warn');
-    await loadLibraries();
-    setupScene();
-    el.startButton.textContent = 'Loading tracker...';
-    setStatus('Loading hand tracker...', 'warn');
-    await initTracker(false);
-    running = true;
-    el.startPanel.style.display = 'none';
-    setStatus('Tracking is running. Show one open hand.', 'warn');
-  } catch (error) {
-    console.error(error);
-    running = false;
-    stopCamera();
-    el.startButton.disabled = false;
-    el.startButton.textContent = 'Try again';
-    setStatus('Could not start.', 'bad');
-    el.startError.textContent = friendlyError(error);
-    el.startError.style.display = 'block';
-    showStartupNote('Startup stopped. The exact error is below.');
+    el.startButton.textContent = 'Loading libraries...'; setStatus('Loading libraries...', 'warn');
+    await loadLibraries(); initScene(); rebuildModel();
+    el.startButton.textContent = 'Loading tracker...'; await initTracker(false);
+    running = true; el.startPanel.style.display = 'none'; setStatus('Tracking is running. Use the mode pill to switch.', 'warn');
+  } catch (err) {
+    console.error(err); stopCamera(); running = false; el.startButton.disabled = false; el.startButton.textContent = 'Try again';
+    el.startError.textContent = friendlyError(err); el.startError.style.display = 'block'; setStatus('Could not start.', 'bad');
   }
 }
 
 async function startCamera() {
   if (!window.isSecureContext) throw new Error('Camera access needs HTTPS or localhost.');
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia is not available in this browser.');
-
-  const attempts = [
-    { audio: false, video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 60 } } },
-    { audio: false, video: { facingMode: 'user', width: { ideal: 960 }, height: { ideal: 540 } } },
+  const tries = [
+    { audio: false, video: { facingMode: { ideal: 'user' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { audio: false, video: { facingMode: 'user' } },
     { audio: false, video: true }
   ];
-
-  let lastError = null;
-  for (let i = 0; i < attempts.length; i++) {
+  let last;
+  for (const opts of tries) {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(attempts[i]);
-      el.video.srcObject = stream;
-      el.video.setAttribute('playsinline', '');
-      el.video.muted = true;
-      await waitForVideo(el.video, 9000);
-      await el.video.play();
-      resizeOverlay();
-      return;
-    } catch (error) {
-      lastError = error;
-      stopCamera();
-      showStartupNote('Camera attempt ' + (i + 1) + ' failed. Trying fallback camera settings...');
-    }
+      el.video.srcObject = await navigator.mediaDevices.getUserMedia(opts);
+      el.video.setAttribute('playsinline', ''); el.video.muted = true;
+      await waitForVideo(el.video); await el.video.play(); resizeOverlay(); return;
+    } catch (err) { last = err; stopCamera(); }
   }
-  throw lastError || new Error('No usable camera stream was found.');
+  throw last || new Error('No camera stream found.');
 }
-
-function waitForVideo(video, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    if (video.videoWidth > 0 && video.videoHeight > 0 && video.readyState >= 2) {
-      resolve();
-      return;
-    }
-    let done = false;
-    const timer = setTimeout(() => {
-      if (done) return;
-      done = true;
-      cleanup();
-      reject(new Error('Camera opened, but video did not become ready.'));
-    }, timeoutMs);
-    function cleanup() {
-      clearTimeout(timer);
-      video.removeEventListener('loadedmetadata', ready);
-      video.removeEventListener('canplay', ready);
-      video.removeEventListener('playing', ready);
-      video.removeEventListener('error', fail);
-    }
-    function ready() {
-      if (done) return;
-      if (video.videoWidth > 0 && video.videoHeight > 0) {
-        done = true;
-        cleanup();
-        resolve();
-      }
-    }
-    function fail() {
-      if (done) return;
-      done = true;
-      cleanup();
-      reject(new Error('Video element reported an error.'));
-    }
-    video.addEventListener('loadedmetadata', ready);
-    video.addEventListener('canplay', ready);
-    video.addEventListener('playing', ready);
-    video.addEventListener('error', fail);
-    video.play().catch(() => {});
-  });
-}
-
-function stopCamera() {
-  if (el.video.srcObject && el.video.srcObject.getTracks) {
-    el.video.srcObject.getTracks().forEach(track => track.stop());
-  }
-  el.video.srcObject = null;
-}
+function waitForVideo(v) { return new Promise((res, rej) => { const t = setTimeout(() => rej(new Error('Camera opened, but video did not become ready.')), 9000); function ok(){ if(v.videoWidth){ clearTimeout(t); res(); } } v.onloadedmetadata = ok; v.oncanplay = ok; v.play().catch(()=>{}); }); }
+function stopCamera() { if (el.video.srcObject) el.video.srcObject.getTracks().forEach(t => t.stop()); el.video.srcObject = null; }
 
 async function loadLibraries() {
-  const modules = await Promise.all([
-    import('three'),
-    import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs')
-  ]);
-  THREE = modules[0];
-  FilesetResolver = modules[1].FilesetResolver;
-  HandLandmarker = modules[1].HandLandmarker;
+  const m = await Promise.all([import('three'), import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs')]);
+  THREE = m[0]; FilesetResolver = m[1].FilesetResolver; HandLandmarker = m[1].HandLandmarker; FaceLandmarker = m[1].FaceLandmarker; PoseLandmarker = m[1].PoseLandmarker;
 }
-
-function setupScene() {
-  if (sceneReady) return;
-  yAxis = new THREE.Vector3(0, 1, 0);
-  tempA = new THREE.Vector3();
-  tempB = new THREE.Vector3();
-  tempC = new THREE.Vector3();
-  tempD = new THREE.Vector3();
-  targetPosition = new THREE.Vector3(0, -0.1, 0);
-  smoothPosition = targetPosition.clone();
-  targetRotation = new THREE.Quaternion();
-  smoothRotation = new THREE.Quaternion();
-  defaultPoints = makeDefaultPoints();
-  targetPoints = defaultPoints.map(point => point.clone());
-  smoothPoints = defaultPoints.map(point => point.clone());
-
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  el.fallback.style.display = 'none';
-  el.stage.appendChild(renderer.domElement);
-
-  scene = new THREE.Scene();
-  camera3d = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera3d.position.set(0, 0.05, 8.3);
-  scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x15182c, 3));
-  const key = new THREE.DirectionalLight(0xffffff, 2.4);
-  key.position.set(2.8, 4.4, 4.8);
-  scene.add(key);
-  const rim = new THREE.DirectionalLight(0x76e3ff, 1.5);
-  rim.position.set(-4.4, 1, -2.4);
-  scene.add(rim);
-
-  handGroup = new THREE.Group();
-  scene.add(handGroup);
-  gridGroup = new THREE.Group();
-  scene.add(gridGroup);
-  makeGrid();
-  buildHandRig();
-  applyPoints(defaultPoints, true);
-  sceneReady = true;
-  requestAnimationFrame(animate);
-}
-
-function makeDefaultPoints() {
-  const source = [
-    [0, -1.18, 0], [-0.56, -0.78, 0.05], [-0.88, -0.36, 0.08], [-1.08, 0.04, 0.07], [-1.26, 0.42, 0.03],
-    [-0.48, -0.24, 0.02], [-0.58, 0.38, 0.06], [-0.64, 0.92, 0.04], [-0.68, 1.38, 0],
-    [-0.12, -0.12, 0.02], [-0.14, 0.58, 0.08], [-0.16, 1.22, 0.06], [-0.18, 1.78, 0.02],
-    [0.26, -0.2, 0.02], [0.34, 0.42, 0.07], [0.4, 0.98, 0.05], [0.44, 1.46, 0.02],
-    [0.6, -0.36, 0], [0.78, 0.16, 0.05], [0.9, 0.62, 0.03], [1, 1.02, 0]
-  ];
-  return source.map(point => new THREE.Vector3(point[0], point[1], point[2]));
-}
-
-function buildHandRig() {
-  const skin = new THREE.MeshStandardMaterial({ color: 0xe9a47b, roughness: 0.58, metalness: 0.02 });
-  const palmMaterial = new THREE.MeshStandardMaterial({ color: 0xf0b18c, roughness: 0.64, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
-  const jointMaterial = new THREE.MeshStandardMaterial({ color: 0xffd1b8, roughness: 0.48 });
-  const tipMaterial = new THREE.MeshStandardMaterial({ color: 0xffbf9f, roughness: 0.42 });
-  const nailMaterial = new THREE.MeshStandardMaterial({ color: 0xffeee8, roughness: 0.34 });
-  const knuckleMaterial = new THREE.MeshStandardMaterial({ color: 0xf6b28f, roughness: 0.46 });
-  const cylinder = new THREE.CylinderGeometry(1, 1, 1, 22, 1, false);
-  const sphere = new THREE.SphereGeometry(1, 24, 14);
-
-  segmentMeshes = CONNECTIONS.slice(0, 20).map(pair => {
-    const mesh = new THREE.Mesh(cylinder, skin);
-    mesh.userData = { a: pair[0], b: pair[1] };
-    handGroup.add(mesh);
-    return mesh;
-  });
-
-  jointMeshes = defaultPoints.map((_, index) => {
-    const material = TIP.has(index) ? tipMaterial : MCP.has(index) ? knuckleMaterial : jointMaterial;
-    const mesh = new THREE.Mesh(sphere, material);
-    handGroup.add(mesh);
-    return mesh;
-  });
-
-  [4, 8, 12, 16, 20].forEach(index => {
-    const nail = new THREE.Mesh(sphere, nailMaterial);
-    nail.userData.index = index;
-    handGroup.add(nail);
-    nailMeshes.push(nail);
-  });
-
-  palmGeometry = new THREE.BufferGeometry();
-  palmGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PALM_TRIANGLES.length * 3), 3));
-  palmMesh = new THREE.Mesh(palmGeometry, palmMaterial);
-  handGroup.add(palmMesh);
-}
-
 async function initTracker(relaxed) {
-  const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
-  const options = {
-    baseOptions: { modelAssetPath: MEDIAPIPE_MODEL_URL, delegate: relaxed ? 'CPU' : 'GPU' },
-    runningMode: 'VIDEO',
-    numHands: 1,
-    minHandDetectionConfidence: relaxed ? 0.12 : 0.25,
-    minHandPresenceConfidence: relaxed ? 0.12 : 0.25,
-    minTrackingConfidence: relaxed ? 0.12 : 0.25
-  };
+  loadingTracker = true; setStatus('Loading ' + label(mode).toLowerCase() + ' tracker...', 'warn');
+  const fileset = await (vision || (vision = FilesetResolver.forVisionTasks(WASM)));
+  try { if (tracker && tracker.close) tracker.close(); } catch (e) {}
+  const delegate = relaxed ? 'CPU' : 'GPU';
   try {
-    if (handLandmarker && handLandmarker.close) handLandmarker.close();
-  } catch (error) {}
-  try {
-    handLandmarker = await HandLandmarker.createFromOptions(vision, options);
-    el.tracker.textContent = 'Tracker: ' + (relaxed ? 'CPU relaxed' : 'GPU low threshold');
-  } catch (error) {
-    options.baseOptions.delegate = 'CPU';
-    handLandmarker = await HandLandmarker.createFromOptions(vision, options);
-    el.tracker.textContent = 'Tracker: ' + (relaxed ? 'CPU relaxed' : 'CPU low threshold');
-  }
+    if (mode === 'hand') tracker = await HandLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: HAND_MODEL, delegate }, runningMode: 'VIDEO', numHands: 1, minHandDetectionConfidence: relaxed ? 0.12 : 0.25, minHandPresenceConfidence: relaxed ? 0.12 : 0.25, minTrackingConfidence: relaxed ? 0.12 : 0.25 });
+    else if (mode === 'face') tracker = await FaceLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: FACE_MODEL, delegate }, runningMode: 'VIDEO', numFaces: 1, minFaceDetectionConfidence: relaxed ? 0.12 : 0.25, minFacePresenceConfidence: relaxed ? 0.12 : 0.25, minTrackingConfidence: relaxed ? 0.12 : 0.25 });
+    else tracker = await PoseLandmarker.createFromOptions(fileset, { baseOptions: { modelAssetPath: POSE_MODEL, delegate }, runningMode: 'VIDEO', numPoses: 1, minPoseDetectionConfidence: relaxed ? 0.12 : 0.25, minPosePresenceConfidence: relaxed ? 0.12 : 0.25, minTrackingConfidence: relaxed ? 0.12 : 0.25 });
+    trackerMode = label(mode) + ' ' + delegate;
+  } catch (err) { if (!relaxed) return initTracker(true); throw err; }
+  finally { loadingTracker = false; updateLabels(); }
+}
+
+function initScene() {
+  if (scene) return;
+  yAxis = new THREE.Vector3(0,1,0); tmp1 = new THREE.Vector3(); tmp2 = new THREE.Vector3();
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.setSize(innerWidth, innerHeight); renderer.outputColorSpace = THREE.SRGBColorSpace;
+  el.fallback.style.display = 'none'; el.stage.appendChild(renderer.domElement);
+  scene = new THREE.Scene(); camera3d = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 100); camera3d.position.set(0, 0.05, 8.3);
+  scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x15182c, 3)); const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(2.8,4.4,4.8); scene.add(key);
+  const rim = new THREE.DirectionalLight(0x76e3ff, 1.5); rim.position.set(-4.4,1,-2.4); scene.add(rim);
+  grid = new THREE.Group(); scene.add(grid); makeGrid(); root = new THREE.Group(); scene.add(root); requestAnimationFrame(animate);
+}
+
+function rebuildModel() {
+  if (!root || !THREE) return;
+  while (root.children.length) root.remove(root.children[0]); meshes = { lines: [], joints: [], extras: [] };
+  const count = mode === 'hand' ? 21 : mode === 'body' ? 33 : FACE_IDS.length;
+  connections = mode === 'hand' ? HAND_CONN : mode === 'body' ? POSE_CONN : FACE_CONN;
+  points = defaultPoints(count); target = points.map(p => p.clone()); smooth = points.map(p => p.clone());
+  const lineMat = new THREE.MeshStandardMaterial({ color: style === 'stick' ? 0x90f4ff : 0xe9a47b, roughness: 0.5 });
+  const jointMat = new THREE.MeshStandardMaterial({ color: style === 'stick' ? 0xffffff : 0xffd1b8, roughness: 0.45 });
+  const cyl = new THREE.CylinderGeometry(1,1,1,18,1,false), sph = new THREE.SphereGeometry(1,20,12);
+  connections.forEach(c => { const m = new THREE.Mesh(cyl, lineMat); m.userData = { a: c[0], b: c[1] }; root.add(m); meshes.lines.push(m); });
+  points.forEach((p,i) => { const m = new THREE.Mesh(sph, jointMat); m.userData.index = i; root.add(m); meshes.joints.push(m); });
+  if (style === 'natural') addNaturalExtras();
+  updateLabels();
+}
+function defaultPoints(count) { const out = []; for (let i=0;i<count;i++) out.push(new THREE.Vector3((i%5-2)*0.22, (Math.floor(i/5)-2)*-0.22, 0)); return out; }
+function addNaturalExtras() {
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf0b18c, roughness: 0.62, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
+  if (mode === 'hand') { const palm = new THREE.Mesh(new THREE.SphereGeometry(0.48,24,14), skin); palm.scale.set(1.0, 0.75, 0.22); root.add(palm); meshes.extras.push(palm); }
+  if (mode === 'face') { const head = new THREE.Mesh(new THREE.SphereGeometry(0.9,32,20), skin); head.scale.set(0.85,1.08,0.55); root.add(head); meshes.extras.push(head); const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffffff }); [-0.27,0.27].forEach(x => { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07,16,8), eyeMat); eye.position.set(x,0.13,0.43); root.add(eye); meshes.extras.push(eye); }); }
+  if (mode === 'body') { const torso = new THREE.Mesh(new THREE.BoxGeometry(1.2,1.45,0.22), new THREE.MeshStandardMaterial({ color: 0x5bd7ff, roughness: 0.55, transparent: true, opacity: 0.82 })); torso.position.set(0,-0.35,-0.03); root.add(torso); meshes.extras.push(torso); const head = new THREE.Mesh(new THREE.SphereGeometry(0.28,24,16), skin); head.position.set(0,1.2,0); root.add(head); meshes.extras.push(head); }
 }
 
 function animate(now) {
-  requestAnimationFrame(animate);
-  const dt = Math.max(1, now - lastFrameMs);
-  fpsValue = fpsValue * 0.9 + (1000 / dt) * 0.1;
-  lastFrameMs = now;
-  if (running && handLandmarker && el.video.readyState >= 2 && now - lastDetectMs >= 30) {
-    lastDetectMs = now;
-    detect(now);
-  }
-  const follow = noHandFrames > 10 ? 0.065 : 0.44;
-  for (let i = 0; i < smoothPoints.length; i++) smoothPoints[i].lerp(targetPoints[i], follow);
-  smoothPosition.lerp(targetPosition, 0.26);
-  smoothRotation.slerp(targetRotation, 0.24);
-  handGroup.position.copy(smoothPosition);
-  handGroup.quaternion.copy(smoothRotation);
-  applyPoints(smoothPoints, false);
-  gridGroup.rotation.z = now * 0.000035;
-  renderer.render(scene, camera3d);
-  el.fps.textContent = 'FPS: ' + Math.round(fpsValue);
-  el.videoSize.textContent = 'Video: ' + (el.video.videoWidth || '?') + 'x' + (el.video.videoHeight || '?');
+  requestAnimationFrame(animate); if (!renderer) return;
+  const dt = Math.max(1, now - lastFrame); fps = fps * 0.9 + (1000 / dt) * 0.1; lastFrame = now;
+  if (running && tracker && !loadingTracker && el.video.readyState >= 2 && now - lastDetect > 32) { lastDetect = now; detect(now); }
+  const follow = misses > 10 ? 0.06 : 0.42; for (let i=0;i<smooth.length;i++) smooth[i].lerp(target[i], follow);
+  drawModel(); if (grid) grid.rotation.z = now * 0.000035; renderer.render(scene, camera3d);
+  el.fps.textContent = 'FPS: ' + Math.round(fps); el.videoSize.textContent = 'Video: ' + (el.video.videoWidth || '?') + 'x' + (el.video.videoHeight || '?');
 }
-
-function detect(now) {
-  analyzedFrames++;
-  el.analyzed.textContent = 'Analyzed: ' + analyzedFrames;
-  try {
-    handleResult(handLandmarker.detectForVideo(el.video, now));
-  } catch (error) {
-    console.error(error);
-    setStatus('Tracker error. Retrying...', 'bad');
-  }
+function detect(now) { analyzed++; el.analyzed.textContent = 'Analyzed: ' + analyzed; try { handle(tracker.detectForVideo(el.video, now)); } catch(e) { console.error(e); setStatus('Tracker error. Retrying...', 'bad'); } }
+function handle(res) {
+  clearOverlay(); let landmarks, world, score = 0.9, name = label(mode) + ': tracked';
+  if (mode === 'hand') { if (!res.landmarks || !res.landmarks.length) return noDetection('No hand detected.'); landmarks = res.landmarks[0]; world = res.worldLandmarks && res.worldLandmarks[0]; const h = res.handednesses && res.handednesses[0] && res.handednesses[0][0]; if (h) { name = 'Hand: ' + h.categoryName; score = h.score; } target = convertPoints(landmarks, world, 21); drawOverlay(landmarks, HAND_CONN); }
+  else if (mode === 'face') { if (!res.faceLandmarks || !res.faceLandmarks.length) return noDetection('No face detected.'); landmarks = res.faceLandmarks[0]; target = FACE_IDS.map(id => map2d(landmarks[id], 5.0, 5.6)); centerAndScale(target, [4,6,8]); drawFaceOverlay(landmarks); }
+  else { if (!res.landmarks || !res.landmarks.length) return noDetection('No body detected. Step back.'); landmarks = res.landmarks[0]; world = res.worldLandmarks && res.worldLandmarks[0]; target = convertPoints(landmarks, world, 33); drawOverlay(landmarks, POSE_CONN); }
+  gotDetection(name, score);
 }
-
-function handleResult(result) {
-  resizeOverlay();
-  overlayCtx.clearRect(0, 0, el.overlay.width, el.overlay.height);
-  if (!result || !result.landmarks || result.landmarks.length === 0) {
-    noHandFrames++;
-    if (noHandFrames > 8) {
-      targetPoints = defaultPoints.map(point => point.clone());
-      targetPosition.set(0, -0.1, 0);
-      targetRotation.identity();
-      setStatus('No hand detected. Move hand fully into camera box.', 'bad');
-      el.noHand.classList.add('show');
-      el.handedness.textContent = 'Hand: none';
-      el.confidence.textContent = 'Confidence: 0%';
-    }
-    if (!triedRelaxedTracker && analyzedFrames > 100 && trackedFrames === 0) {
-      triedRelaxedTracker = true;
-      setStatus('No hand yet. Switching to relaxed CPU tracker...', 'warn');
-      initTracker(true).catch(console.warn);
-    }
-    return;
-  }
-  noHandFrames = 0;
-  trackedFrames++;
-  el.tracked.textContent = 'Tracked: ' + trackedFrames;
-  el.noHand.classList.remove('show');
-  const landmarks = result.landmarks[0];
-  const world = result.worldLandmarks && result.worldLandmarks[0] ? result.worldLandmarks[0] : null;
-  const handInfo = result.handednesses && result.handednesses[0] && result.handednesses[0][0];
-  el.handedness.textContent = 'Hand: ' + (handInfo ? handInfo.categoryName : 'tracked');
-  el.confidence.textContent = 'Confidence: ' + Math.round((handInfo ? handInfo.score : 0) * 100) + '%';
-  setStatus('Hand detected. Animating 3D hand.', 'good');
-  drawLandmarks(landmarks);
-  targetPoints = convertToThreePoints(landmarks, world);
-  updateHandPosition(landmarks);
-  updateHandRotation(targetPoints);
-}
-
-function convertToThreePoints(imageLandmarks, worldLandmarks) {
-  let points;
-  if (worldLandmarks && worldLandmarks.length === 21) {
-    points = worldLandmarks.map(point => new THREE.Vector3(-point.x * 16, -point.y * 16, -point.z * 16));
-  } else {
-    const aspect = (el.video.videoWidth || 1280) / Math.max(1, el.video.videoHeight || 720);
-    const viewWidth = 5.4 * Math.min(aspect, 1.9);
-    points = imageLandmarks.map(point => new THREE.Vector3((0.5 - point.x) * viewWidth, (0.5 - point.y) * 5.7, -point.z * 8.5));
-  }
-  const center = new THREE.Vector3();
-  [0, 5, 9, 13, 17].forEach(index => center.add(points[index]));
-  center.multiplyScalar(0.2);
-  const scale = THREE.MathUtils.clamp(1.2 / Math.max(distance(points[0], points[9]), 0.08), 0.72, 2.25);
-  return points.map(point => point.sub(center).multiplyScalar(scale));
-}
-
-function updateHandPosition(landmarks) {
-  let centerX = 0;
-  let centerY = 0;
-  let minX = 1;
-  let maxX = 0;
-  for (const point of landmarks) {
-    centerX += point.x;
-    centerY += point.y;
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-  }
-  centerX /= landmarks.length;
-  centerY /= landmarks.length;
-  const z = THREE.MathUtils.clamp((0.28 - Math.max(0.04, maxX - minX)) * 7, -1.15, 1.55);
-  targetPosition.set((0.5 - centerX) * 3.8, (0.5 - centerY) * 2.55 - 0.1, z);
-}
-
-function updateHandRotation(points) {
-  const x = tempA.subVectors(points[17], points[5]).normalize();
-  const y = tempB.subVectors(points[9], points[0]).normalize();
-  const z = tempC.crossVectors(x, y).normalize();
-  if (z.lengthSq() < 0.001) return;
-  y.crossVectors(z, x).normalize();
-  targetRotation.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
-  targetRotation.slerp(new THREE.Quaternion(), 0.35);
-}
-
-function applyPoints(points, snap) {
-  const working = snap ? points.map(point => point.clone()) : points;
-  for (const mesh of segmentMeshes) placeCylinder(mesh, working[mesh.userData.a], working[mesh.userData.b], radiusFor(mesh.userData.a, mesh.userData.b));
-  for (let i = 0; i < jointMeshes.length; i++) {
-    jointMeshes[i].position.copy(working[i]);
-    jointMeshes[i].scale.setScalar(TIP.has(i) ? 0.083 : MCP.has(i) ? 0.096 : i === 0 ? 0.11 : 0.069);
-  }
-  for (const nail of nailMeshes) {
-    const index = nail.userData.index;
-    nail.position.copy(working[index]);
-    tempD.subVectors(working[index], working[index - 1]).normalize();
-    nail.position.addScaledVector(tempD, 0.028);
-    nail.quaternion.setFromUnitVectors(yAxis, tempD);
-    nail.scale.set(0.055, 0.025, 0.088);
-  }
-  const array = palmGeometry.attributes.position.array;
-  for (let i = 0; i < PALM_TRIANGLES.length; i++) {
-    const point = working[PALM_TRIANGLES[i]];
-    array[i * 3 + 0] = point.x;
-    array[i * 3 + 1] = point.y;
-    array[i * 3 + 2] = point.z - 0.02;
-  }
-  palmGeometry.attributes.position.needsUpdate = true;
-  palmGeometry.computeVertexNormals();
-}
-
-function placeCylinder(mesh, a, b, radius) {
-  const direction = tempA.subVectors(b, a);
-  const length = Math.max(direction.length(), 0.0001);
-  mesh.position.copy(tempB.copy(a).add(b).multiplyScalar(0.5));
-  mesh.quaternion.setFromUnitVectors(yAxis, direction.normalize());
-  mesh.scale.set(radius, length, radius);
-}
-
-function radiusFor(a, b) {
-  if (a === 0 || b === 0) return 0.07;
-  if (MCP.has(a) || MCP.has(b)) return 0.063;
-  if (TIP.has(a) || TIP.has(b)) return 0.044;
-  return 0.053;
-}
-
-function drawLandmarks(landmarks) {
-  const w = el.overlay.width;
-  const h = el.overlay.height;
-  overlayCtx.save();
-  overlayCtx.lineCap = 'round';
-  overlayCtx.lineJoin = 'round';
-  for (const pair of CONNECTIONS) {
-    const a = landmarks[pair[0]];
-    const b = landmarks[pair[1]];
-    overlayCtx.beginPath();
-    overlayCtx.moveTo(a.x * w, a.y * h);
-    overlayCtx.lineTo(b.x * w, b.y * h);
-    overlayCtx.lineWidth = 5;
-    overlayCtx.strokeStyle = 'rgba(110,214,255,.92)';
-    overlayCtx.stroke();
-    overlayCtx.lineWidth = 1.5;
-    overlayCtx.strokeStyle = 'rgba(0,0,0,.55)';
-    overlayCtx.stroke();
-  }
-  for (let i = 0; i < landmarks.length; i++) {
-    const point = landmarks[i];
-    overlayCtx.beginPath();
-    overlayCtx.arc(point.x * w, point.y * h, TIP.has(i) ? 7 : 4.5, 0, Math.PI * 2);
-    overlayCtx.fillStyle = TIP.has(i) ? '#90f4ff' : '#fff';
-    overlayCtx.fill();
-    overlayCtx.lineWidth = 2;
-    overlayCtx.strokeStyle = 'rgba(0,0,0,.62)';
-    overlayCtx.stroke();
-  }
-  overlayCtx.restore();
-}
-
-function makeGrid() {
-  const lineMaterial = new THREE.LineBasicMaterial({ color: 0x66d9ff, transparent: true, opacity: 0.09 });
-  const ringMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.055 });
-  for (let radius = 1.2; radius <= 6; radius += 0.8) {
-    const points = [];
-    for (let i = 0; i <= 128; i++) {
-      const angle = i / 128 * Math.PI * 2;
-      points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, -3.2));
-    }
-    gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), ringMaterial));
-  }
-  for (let i = 0; i < 18; i++) {
-    const angle = i / 18 * Math.PI * 2;
-    gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(Math.cos(angle) * 0.55, Math.sin(angle) * 0.55, -3.2),
-      new THREE.Vector3(Math.cos(angle) * 6.5, Math.sin(angle) * 6.5, -3.2)
-    ]), lineMaterial));
-  }
-}
-
-function resizeOverlay() {
-  const rect = el.overlay.getBoundingClientRect();
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const width = Math.max(1, Math.round(rect.width * dpr));
-  const height = Math.max(1, Math.round(rect.height * dpr));
-  if (el.overlay.width !== width || el.overlay.height !== height) {
-    el.overlay.width = width;
-    el.overlay.height = height;
-    overlayCtx = el.overlay.getContext('2d', { alpha: true });
-  }
-}
-
-function resizeAll() {
-  resizeOverlay();
-  if (!renderer || !camera3d) return;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  camera3d.aspect = window.innerWidth / window.innerHeight;
-  camera3d.updateProjectionMatrix();
-}
-
-function setStatus(text, mode) {
-  el.statusText.textContent = text;
-  el.stateDot.classList.toggle('good', mode === 'good');
-  el.stateDot.classList.toggle('bad', mode === 'bad');
-}
-
-function showStartupNote(text) {
-  el.startLog.textContent = text;
-  el.startLog.style.display = 'block';
-}
-
-function friendlyError(error) {
-  const name = error && error.name ? error.name : 'Error';
-  const message = error && error.message ? error.message : String(error);
-  const details = '\n\nTechnical details: ' + name + ': ' + message;
-  if (!window.isSecureContext) return 'Camera access is blocked because this page is not running from HTTPS or localhost.' + details;
-  if (/NotAllowedError|Permission|denied|permission/i.test(name + ' ' + message)) return "Chrome denied camera access. Change this site's camera setting to Allow and check Android Settings > Apps > Chrome > Permissions > Camera." + details;
-  if (/NotFoundError|DevicesNotFoundError|OverconstrainedError|Constraint|facingMode/i.test(name + ' ' + message)) return 'I could not find a usable front camera. I tried front camera first, then any camera.' + details;
-  if (/NotReadableError|TrackStartError|Could not start video source/i.test(name + ' ' + message)) return 'The browser found the camera but could not start it. Close other apps or tabs using the camera and try again.' + details;
-  if (/import|module|Failed to fetch|Load failed|cdn|network|ERR_/i.test(message)) return 'A library or model file failed to load. Check internet access or browser restrictions.' + details;
-  return 'Something failed while starting the camera, renderer, or tracker.' + details;
-}
-
-function distance(a, b) {
-  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2);
-}
+function noDetection(msg) { misses++; if (misses > 8) { setStatus(msg, 'bad'); el.noHand.textContent = msg; el.noHand.classList.add('show'); el.handedness.textContent = label(mode) + ': none'; el.confidence.textContent = 'Confidence: 0%'; } if (!triedRelaxed && analyzed > 100 && tracked === 0) { triedRelaxed = true; initTracker(true).catch(console.warn); } }
+function gotDetection(name, score) { misses = 0; tracked++; el.tracked.textContent = 'Tracked: ' + tracked; el.noHand.classList.remove('show'); el.handedness.textContent = name; el.confidence.textContent = 'Confidence: ' + Math.round(score * 100) + '%'; setStatus(name.replace(':','') + ' detected.', 'good'); }
+function convertPoints(lm, world, count) { let arr; if (world && world.length >= count) arr = world.slice(0,count).map(p => new THREE.Vector3(-p.x*4, -p.y*4, -p.z*4)); else arr = lm.slice(0,count).map(p => map2d(p, 5.2, 6.0)); centerAndScale(arr, mode === 'hand' ? [0,5,9,13,17] : [11,12,23,24]); return arr; }
+function map2d(p, w, h) { return new THREE.Vector3((0.5 - p.x) * w, (0.5 - p.y) * h, -p.z * 4); }
+function centerAndScale(arr, ids) { const c = new THREE.Vector3(); ids.forEach(i => arr[i] && c.add(arr[i])); c.multiplyScalar(1 / ids.length); arr.forEach(p => p.sub(c)); const d = ids.length > 2 && arr[ids[1]] && arr[ids[2]] ? dist(arr[ids[1]], arr[ids[2]]) : 1; const s = THREE.MathUtils.clamp(1.25 / Math.max(d, 0.1), 0.6, 2.4); arr.forEach(p => p.multiplyScalar(s)); }
+function drawModel() { for (const m of meshes.lines) { if (smooth[m.userData.a] && smooth[m.userData.b]) placeCylinder(m, smooth[m.userData.a], smooth[m.userData.b], radius(m.userData.a, m.userData.b)); } for (const j of meshes.joints) { const p = smooth[j.userData.index]; if (p) { j.position.copy(p); j.scale.setScalar(style === 'stick' ? 0.045 : 0.085); } } }
+function radius(a,b) { const base = style === 'stick' ? 0.018 : mode === 'body' ? 0.07 : 0.055; return base * ((mode === 'hand' && (TIP.has(a) || TIP.has(b))) ? 0.72 : 1); }
+function placeCylinder(m, a, b, r) { const d = tmp1.subVectors(b,a), len = Math.max(d.length(), 0.0001); m.position.copy(tmp2.copy(a).add(b).multiplyScalar(0.5)); m.quaternion.setFromUnitVectors(yAxis, d.normalize()); m.scale.set(r, len, r); }
+function drawOverlay(lm, conns) { const w=el.overlay.width,h=el.overlay.height; ctx.save(); ctx.lineCap='round'; conns.forEach(c => { const a=lm[c[0]], b=lm[c[1]]; if(!a||!b) return; ctx.beginPath(); ctx.moveTo(a.x*w,a.y*h); ctx.lineTo(b.x*w,b.y*h); ctx.lineWidth=5; ctx.strokeStyle='rgba(110,214,255,.92)'; ctx.stroke(); ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.stroke(); }); lm.forEach((p,i)=>{ if(!p) return; ctx.beginPath(); ctx.arc(p.x*w,p.y*h,TIP.has(i)?7:4,0,Math.PI*2); ctx.fillStyle=TIP.has(i)?'#90f4ff':'#fff'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle='rgba(0,0,0,.62)'; ctx.stroke(); }); ctx.restore(); }
+function drawFaceOverlay(lm) { const w=el.overlay.width,h=el.overlay.height; ctx.save(); FACE_CONN.forEach(c=>{ const a=lm[FACE_IDS[c[0]]], b=lm[FACE_IDS[c[1]]]; if(!a||!b)return; ctx.beginPath(); ctx.moveTo(a.x*w,a.y*h); ctx.lineTo(b.x*w,b.y*h); ctx.lineWidth=4; ctx.strokeStyle='rgba(110,214,255,.92)'; ctx.stroke(); }); FACE_IDS.forEach(id=>{ const p=lm[id]; if(!p)return; ctx.beginPath(); ctx.arc(p.x*w,p.y*h,4.5,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.62)'; ctx.stroke(); }); ctx.restore(); }
+function clearOverlay() { resizeOverlay(); ctx.clearRect(0,0,el.overlay.width,el.overlay.height); }
+function makeGrid() { const lm=new THREE.LineBasicMaterial({color:0x66d9ff,transparent:true,opacity:.09}), rm=new THREE.LineBasicMaterial({color:0xffffff,transparent:true,opacity:.055}); for(let r=1.2;r<=6;r+=.8){const p=[];for(let i=0;i<=128;i++){const a=i/128*Math.PI*2;p.push(new THREE.Vector3(Math.cos(a)*r,Math.sin(a)*r,-3.2));}grid.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(p),rm));} }
+function resizeOverlay(){ const r=el.overlay.getBoundingClientRect(), d=Math.min(devicePixelRatio||1,2), w=Math.max(1,Math.round(r.width*d)), h=Math.max(1,Math.round(r.height*d)); if(el.overlay.width!==w||el.overlay.height!==h){el.overlay.width=w;el.overlay.height=h;ctx=el.overlay.getContext('2d',{alpha:true});} }
+function resizeAll(){ resizeOverlay(); if(!renderer)return; renderer.setPixelRatio(Math.min(devicePixelRatio||1,2)); renderer.setSize(innerWidth,innerHeight); camera3d.aspect=innerWidth/innerHeight; camera3d.updateProjectionMatrix(); }
+function setStatus(text, state){ el.statusText.textContent=text; el.stateDot.classList.toggle('good',state==='good'); el.stateDot.classList.toggle('bad',state==='bad'); }
+function showLog(text){ el.startLog.textContent=text; el.startLog.style.display='block'; }
+function friendlyError(e){ const d='\n\nTechnical details: '+(e.name||'Error')+': '+(e.message||String(e)); if(!isSecureContext)return 'Camera access needs HTTPS or localhost.'+d; if(/permission|denied|NotAllowed/i.test(e.name+' '+e.message))return 'Chrome denied camera access. Allow camera for this site and try again.'+d; return 'Something failed while starting the camera, tracker, or 3D view.'+d; }
+function dist(a,b){ return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2+(a.z-b.z)**2); }
